@@ -15,6 +15,10 @@
   <Project>https://github.com/zombifiedturkey/Fancyfin</Project>
   <ReadMe>https://github.com/zombifiedturkey/Fancyfin#readme</ReadMe>
   <Icon>https://raw.githubusercontent.com/zombifiedturkey/Fancyfin/main/public/icon-512.png</Icon>
+  <Screenshot>https://raw.githubusercontent.com/zombifiedturkey/Fancyfin/main/docs/screenshots/08-home-hero.jpg</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/zombifiedturkey/Fancyfin/main/docs/screenshots/06-home-discover.jpg</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/zombifiedturkey/Fancyfin/main/docs/screenshots/04-genre-hero.jpg</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/zombifiedturkey/Fancyfin/main/docs/screenshots/03-show-panel.jpg</Screenshot>
   <License>MIT</License>
   <Overview>A modern, cinematic web client for Jellyfin. Browse and watch your library in a polished glass-style interface with a featured banner of what is popular right now, subtitles and audio track choice, and one-click adding of missing titles to Radarr and Sonarr. Point it at your existing Jellyfin server; the Jellyfin server itself is not changed.&#13;
 &#13;

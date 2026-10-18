@@ -8,6 +8,15 @@ Fancyfin talks only to the public Jellyfin API, so your server stays stock and u
 
 > **Status:** first release (0.1). Browsing, detail pages, playback (direct play and HLS transcode), subtitles (SRT, VTT, ASS/SSA, burned-in image subs), audio track selection and search all work. Expect rough edges.
 
+## Screenshots
+
+| | |
+|---|---|
+| ![Home](docs/screenshots/08-home-hero.jpg) | ![Discover row](docs/screenshots/06-home-discover.jpg) |
+| ![Movies by genre](docs/screenshots/04-genre-hero.jpg) | ![Title not in your library](docs/screenshots/05-not-owned-hero.jpg) |
+| ![Show panel](docs/screenshots/03-show-panel.jpg) | ![Episode list](docs/screenshots/07-episode-panel.jpg) |
+| ![Library grid](docs/screenshots/01-library.jpg) | ![Settings](docs/screenshots/02-settings.jpg) |
+
 ## Local development
 
 Requirements: Node 22+ and [pnpm](https://pnpm.io/installation) 10+.
