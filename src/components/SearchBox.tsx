@@ -223,7 +223,7 @@ export function SearchBox({
 					<div
 						ref={panelRef}
 						id="search-results"
-						className="glass fixed right-[var(--page-gutter)] top-[76px] z-[60] max-h-[min(34rem,calc(100dvh-6.5rem))] w-[clamp(19rem,26vw,28rem)] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-card p-2 shadow-card"
+						className="fixed right-[var(--page-gutter)] top-[76px] z-[60] max-h-[min(34rem,calc(100dvh-6.5rem))] w-[clamp(19rem,26vw,28rem)] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-card border border-white/15 bg-[rgb(16_18_28/0.88)] p-2 shadow-[0_24px_60px_-12px_rgb(0_0_0/0.7)] backdrop-blur-[44px] backdrop-saturate-[1.6]"
 					>
 						{results.isError ? (
 							<p className="p-3 text-sm text-ink-muted">
