@@ -7,7 +7,8 @@ import { formatRuntime, ticksToMinutes } from "../lib/format";
 import { backdropImage, logoImage } from "../lib/images";
 import { usePeek } from "../lib/peek";
 import { updateSettings, useMotionReduced, useSettings } from "../lib/settings";
-import { tmdbImage, tmdbPage, useTmdbEnabled } from "../lib/tmdb";
+import { tmdbImage, useTmdbEnabled } from "../lib/tmdb";
+import { tmdbPeekId } from "../lib/tmdb-detail";
 import { AddToArrButton } from "./AddToArrButton";
 import { Switch } from "./controls";
 import { FadeImage } from "./FadeImage";
@@ -230,18 +231,19 @@ export function FeaturedHero({ entries, eyebrow }: FeaturedHeroProps) {
 										variant="hero"
 										onDialogChange={setDialogOpen}
 									/>
-									<a
-										href={tmdbPage(discover)}
-										target="_blank"
-										rel="noopener noreferrer"
+									<button
+										type="button"
+										onClick={() =>
+											peek.open(tmdbPeekId(discover.kind, discover.id))
+										}
 										className={
 											arr[arrForKind(discover.kind)]
 												? "glass cursor-pointer rounded-pill px-6 py-3 text-sm font-semibold text-ink transition-colors hover:bg-glass-strong"
 												: "flex cursor-pointer items-center gap-2 rounded-pill bg-ink px-6 py-3 text-sm font-semibold text-canvas transition-opacity hover:opacity-90"
 										}
 									>
-										View on TMDB
-									</a>
+										Details
+									</button>
 								</>
 							) : null}
 						</div>

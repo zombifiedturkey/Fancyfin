@@ -6,7 +6,8 @@ import { posterImage } from "../lib/images";
 import { useMissingResults } from "../lib/missing-queries";
 import { usePeek } from "../lib/peek";
 import { useSearchResults } from "../lib/queries";
-import { type TmdbTitle, tmdbImage, tmdbPage } from "../lib/tmdb";
+import { type TmdbTitle, tmdbImage } from "../lib/tmdb";
+import { tmdbPeekId } from "../lib/tmdb-detail";
 import { AddToArrButton } from "./AddToArrButton";
 import { FadeImage } from "./FadeImage";
 
@@ -73,15 +74,20 @@ function Row({
 }
 
 /** A title from TMDB that the library doesn't have, with an Add button for Radarr or Sonarr. */
-function MissingRow({ title }: { title: TmdbTitle }) {
+function MissingRow({
+	title,
+	onPick,
+}: {
+	title: TmdbTitle;
+	onPick: (title: TmdbTitle) => void;
+}) {
 	const hue = hueFor(title.title);
 	return (
 		<li className="flex items-center gap-3 rounded-xl p-2">
-			<a
-				href={tmdbPage(title)}
-				target="_blank"
-				rel="noopener noreferrer"
-				className="flex min-w-0 flex-1 items-center gap-3 text-left"
+			<button
+				type="button"
+				onClick={() => onPick(title)}
+				className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
 			>
 				<span
 					className="relative aspect-[2/3] w-10 shrink-0 overflow-hidden rounded-md border border-glass-border"
@@ -106,7 +112,7 @@ function MissingRow({ title }: { title: TmdbTitle }) {
 						{title.year ? ` · ${title.year}` : ""}
 					</span>
 				</span>
-			</a>
+			</button>
 			<AddToArrButton title={title} variant="row" />
 		</li>
 	);
@@ -334,6 +340,10 @@ export function SearchBox({
 												<MissingRow
 													key={`${title.kind}:${title.id}`}
 													title={title}
+													onPick={(picked) => {
+														setOpen(false);
+														peek.open(tmdbPeekId(picked.kind, picked.id));
+													}}
 												/>
 											))}
 										</ul>

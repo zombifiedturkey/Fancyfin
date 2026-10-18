@@ -7,41 +7,15 @@ import { castOf } from "../lib/item-info";
 import { useItem, useSimilarItems } from "../lib/item-queries";
 import { usePeek } from "../lib/peek";
 import { useMotionReduced } from "../lib/settings";
+import { parseTmdbPeekId } from "../lib/tmdb-detail";
 import { EpisodeList } from "./EpisodeList";
 import { FadeImage } from "./FadeImage";
 import { ItemActions } from "./ItemActions";
 import { factsFor, ItemDetails } from "./ItemDetails";
 import { MediaShelf } from "./MediaShelf";
+import { chip, PanelSkeleton, Score } from "./PeekParts";
 import { PeopleShelf } from "./PeopleShelf";
-
-const chip =
-	"rounded-pill border border-glass-border bg-glass px-3 py-1 text-xs font-medium text-ink-muted";
-
-function Score({ label, value }: { label: string; value: string }) {
-	return (
-		<div className="glass rounded-card px-4 py-3">
-			<p className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
-				{label}
-			</p>
-			<p className="mt-0.5 text-2xl font-semibold tracking-tight">{value}</p>
-		</div>
-	);
-}
-
-function PanelSkeleton() {
-	return (
-		<div className="page-gutter pt-40 sm:pt-52" aria-hidden>
-			<div className="flex items-end gap-8">
-				<div className="shimmer aspect-[2/3] w-28 shrink-0 rounded-card sm:w-52" />
-				<div className="w-full max-w-md">
-					<div className="shimmer h-12 w-full rounded-card" />
-					<div className="shimmer mt-4 h-5 w-2/3 rounded-pill" />
-				</div>
-			</div>
-			<div className="shimmer mt-8 h-24 max-w-2xl rounded-card" />
-		</div>
-	);
-}
+import { TmdbPeekContent } from "./TmdbPeekContent";
 
 function PanelContent({ itemId }: { itemId: string }) {
 	const peek = usePeek();
@@ -226,6 +200,8 @@ function PanelContent({ itemId }: { itemId: string }) {
 
 function PeekPanel({ itemId }: { itemId: string }) {
 	const { close } = usePeek();
+	// A title the library doesn't have is shown from TMDB, in the same panel.
+	const tmdb = parseTmdbPeekId(itemId);
 	const reduceMotion = useMotionReduced();
 	const duration = reduceMotion ? 0 : 0.28;
 
@@ -267,15 +243,17 @@ function PeekPanel({ itemId }: { itemId: string }) {
 				transition={{ duration, ease: [0.16, 1, 0.3, 1] }}
 			>
 				<div className="absolute right-4 top-4 z-20 flex gap-2">
-					<Link
-						to="/item/$id"
-						params={{ id: itemId }}
-						aria-label="Open full page"
-						title="Open full page"
-						className="glass flex h-10 items-center rounded-pill px-4 text-sm font-medium text-ink transition-colors hover:bg-glass-strong"
-					>
-						Full page ↗
-					</Link>
+					{!tmdb && (
+						<Link
+							to="/item/$id"
+							params={{ id: itemId }}
+							aria-label="Open full page"
+							title="Open full page"
+							className="glass flex h-10 items-center rounded-pill px-4 text-sm font-medium text-ink transition-colors hover:bg-glass-strong"
+						>
+							Full page ↗
+						</Link>
+					)}
 					<button
 						type="button"
 						aria-label="Close"
@@ -302,7 +280,11 @@ function PeekPanel({ itemId }: { itemId: string }) {
 					key={itemId}
 					className="h-full overflow-y-auto overscroll-contain [--page-gutter:1.25rem] sm:[--page-gutter:2.75rem]"
 				>
-					<PanelContent itemId={itemId} />
+					{tmdb ? (
+						<TmdbPeekContent kind={tmdb.kind} id={tmdb.id} />
+					) : (
+						<PanelContent itemId={itemId} />
+					)}
 				</div>
 			</motion.div>
 		</>

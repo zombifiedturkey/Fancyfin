@@ -11,17 +11,17 @@ function initials(name: string): string {
 	return (first + last).toUpperCase();
 }
 
-function PersonCard({ person }: { person: BaseItemPerson }) {
-	const name = person.Name ?? "";
+/** One cast member: a photo (or their initials), a name and the role they played. */
+export function PersonView({
+	name,
+	role,
+	src,
+}: {
+	name: string;
+	role?: string;
+	src?: string;
+}) {
 	const hue = hueFor(name);
-	const src =
-		person.Id && person.PrimaryImageTag
-			? imageUrl(person.Id, "Primary", {
-					tag: person.PrimaryImageTag,
-					maxWidth: 300,
-				})
-			: undefined;
-
 	return (
 		<div>
 			<div
@@ -45,10 +45,28 @@ function PersonCard({ person }: { person: BaseItemPerson }) {
 				)}
 			</div>
 			<p className="mt-2 truncate text-sm font-medium">{name}</p>
-			{person.Role && (
-				<p className="truncate text-xs text-ink-muted">{person.Role}</p>
-			)}
+			{role && <p className="truncate text-xs text-ink-muted">{role}</p>}
 		</div>
+	);
+}
+
+/** The width of a cast member's slot in a shelf. */
+export const personSlot = "w-28 shrink-0 sm:w-32";
+
+function PersonCard({ person }: { person: BaseItemPerson }) {
+	const src =
+		person.Id && person.PrimaryImageTag
+			? imageUrl(person.Id, "Primary", {
+					tag: person.PrimaryImageTag,
+					maxWidth: 300,
+				})
+			: undefined;
+	return (
+		<PersonView
+			name={person.Name ?? ""}
+			role={person.Role ?? undefined}
+			src={src}
+		/>
 	);
 }
 
@@ -64,10 +82,7 @@ export function PeopleShelf({
 	return (
 		<Shelf title={title}>
 			{people.map((person) => (
-				<li
-					key={`${person.Id}:${person.Role}`}
-					className="w-28 shrink-0 sm:w-32"
-				>
+				<li key={`${person.Id}:${person.Role}`} className={personSlot}>
 					<PersonCard person={person} />
 				</li>
 			))}
