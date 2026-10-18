@@ -1,18 +1,25 @@
 import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models/base-item-dto";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
+import type { FeaturedEntry } from "../lib/featured";
 import { formatRuntime, ticksToMinutes } from "../lib/format";
 import { backdropImage, logoImage } from "../lib/images";
 import { usePeek } from "../lib/peek";
+import { updateSettings, useMotionReduced, useSettings } from "../lib/settings";
+import { tmdbImage, tmdbPage, useTmdbEnabled } from "../lib/tmdb";
+import { Switch } from "./controls";
 import { FadeImage } from "./FadeImage";
 import { PlayButton } from "./PlayButton";
 
 const SLIDE_MS = 9000;
 
 type FeaturedHeroProps = {
-	items: BaseItemDto[];
+	entries: FeaturedEntry[];
 	eyebrow: string;
 };
+
+/** Banner heights for the "top banner size" setting. */
+const heroHeight = { full: "min-h-[78dvh]", compact: "min-h-[52dvh]" } as const;
 
 /** The facts shown under the title: year, rating, and runtime or season count. */
 function metaFor(item: BaseItemDto): string[] {
@@ -50,14 +57,16 @@ function Chevron({ direction }: { direction: "left" | "right" }) {
 }
 
 /** Full-bleed carousel of featured titles with crossfading backdrops. */
-export function FeaturedHero({ items, eyebrow }: FeaturedHeroProps) {
-	const reduceMotion = useReducedMotion();
+export function FeaturedHero({ entries, eyebrow }: FeaturedHeroProps) {
+	const reduceMotion = useMotionReduced();
+	const settings = useSettings();
+	const tmdbOn = useTmdbEnabled();
 	const peek = usePeek();
 	const [index, setIndex] = useState(0);
 	const [paused, setPaused] = useState(false);
 
-	const count = items.length;
-	const current = items[index % count];
+	const count = entries.length;
+	const current = entries[index % count];
 
 	const go = (direction: -1 | 1) =>
 		setIndex((i) => (i + count + direction) % count);
@@ -73,27 +82,46 @@ export function FeaturedHero({ items, eyebrow }: FeaturedHeroProps) {
 
 	if (!current) return null;
 
-	const logo = logoImage(current, 640);
-	const meta = metaFor(current);
-	const genres = (current.Genres ?? []).slice(0, 3);
+	const owned = "owned" in current ? current.owned : undefined;
+	const discover = "discover" in current ? current.discover : undefined;
+	const logo = owned ? logoImage(owned, 640) : undefined;
+	const title = owned?.Name ?? discover?.title ?? "";
+	const meta = owned
+		? metaFor(owned)
+		: [
+				discover?.year ? String(discover.year) : undefined,
+				discover?.rating ? `★ ${discover.rating.toFixed(1)}` : undefined,
+				discover?.kind === "tv" ? "TV series" : "Movie",
+			].filter((part): part is string => Boolean(part));
+	const genres = (owned?.Genres ?? []).slice(0, 3);
+	const overview = owned?.Overview ?? discover?.overview;
+	const popularLabel =
+		discover || (owned && "popular" in current && current.popular)
+			? "Popular right now"
+			: undefined;
+	// Only worth offering when the banner can contain titles the library doesn't have.
+	const showDiscoverToggle = tmdbOn && settings.featuredSource !== "recent";
 
 	return (
 		<section
 			aria-roledescription="carousel"
 			aria-label="Featured"
-			className="group/hero relative isolate flex min-h-[78dvh] items-end overflow-hidden"
+			className={`group/hero relative isolate flex ${heroHeight[settings.heroStyle]} items-end overflow-hidden`}
 			onMouseEnter={() => setPaused(true)}
 			onMouseLeave={() => setPaused(false)}
 			onFocus={() => setPaused(true)}
 			onBlur={() => setPaused(false)}
 		>
 			{/* Backdrops stack on top of each other; only the current one is visible. */}
-			{items.map((item, i) => {
-				const src = backdropImage(item, 1920);
+			{entries.map((entry, i) => {
+				const src =
+					"owned" in entry
+						? backdropImage(entry.owned, 1920)
+						: tmdbImage(entry.discover.backdrop, "w1280");
 				if (!src) return null;
 				return (
 					<motion.div
-						key={item.Id}
+						key={entry.key}
 						aria-hidden
 						className="absolute inset-0 -z-20"
 						initial={false}
@@ -123,7 +151,7 @@ export function FeaturedHero({ items, eyebrow }: FeaturedHeroProps) {
 			<div className="page-gutter w-full pb-20 pt-[calc(var(--nav-height)+4rem)]">
 				<AnimatePresence mode="wait">
 					<motion.div
-						key={current.Id}
+						key={current.key}
 						initial={{ opacity: 0, y: 20 }}
 						animate={{ opacity: 1, y: 0 }}
 						exit={{ opacity: 0, y: -8 }}
@@ -133,21 +161,28 @@ export function FeaturedHero({ items, eyebrow }: FeaturedHeroProps) {
 						}}
 						className="max-w-2xl"
 					>
-						<p className="mb-4 text-sm font-medium uppercase tracking-[0.2em] text-accent-strong">
-							{eyebrow}
-						</p>
+						<div className="mb-4 flex flex-wrap items-center gap-3">
+							<p className="text-sm font-medium uppercase tracking-[0.2em] text-accent-strong">
+								{popularLabel ?? eyebrow}
+							</p>
+							{discover && (
+								<span className="glass rounded-pill px-3 py-1 text-xs font-semibold text-ink">
+									Not in your library
+								</span>
+							)}
+						</div>
 
 						{logo ? (
 							<FadeImage
 								key={logo}
 								src={logo}
-								alt={current.Name ?? ""}
+								alt={title}
 								loading="eager"
 								className="max-h-28 w-auto max-w-full object-contain object-left sm:max-h-36"
 							/>
 						) : (
 							<h1 className="text-4xl font-semibold leading-[1.05] tracking-tight sm:text-6xl">
-								{current.Name}
+								{title}
 							</h1>
 						)}
 
@@ -161,43 +196,73 @@ export function FeaturedHero({ items, eyebrow }: FeaturedHeroProps) {
 						)}
 
 						<p className="mt-4 line-clamp-3 text-base text-ink/90 sm:text-lg">
-							{current.Overview}
+							{overview}
 						</p>
 
 						<div className="mt-8 flex flex-wrap items-center gap-3">
-							<PlayButton
-								item={current}
-								className="flex cursor-pointer items-center gap-2 rounded-pill bg-ink px-6 py-3 text-sm font-semibold text-canvas transition-opacity hover:opacity-90"
-							/>
-							{current.Id && (
-								<button
-									type="button"
-									onClick={() => current.Id && peek.open(current.Id)}
-									className="glass cursor-pointer rounded-pill px-6 py-3 text-sm font-semibold text-ink transition-colors hover:bg-glass-strong"
+							{owned ? (
+								<>
+									<PlayButton
+										item={owned}
+										className="flex cursor-pointer items-center gap-2 rounded-pill bg-ink px-6 py-3 text-sm font-semibold text-canvas transition-opacity hover:opacity-90"
+									/>
+									{owned.Id && (
+										<button
+											type="button"
+											onClick={() => owned.Id && peek.open(owned.Id)}
+											className="glass cursor-pointer rounded-pill px-6 py-3 text-sm font-semibold text-ink transition-colors hover:bg-glass-strong"
+										>
+											More info
+										</button>
+									)}
+								</>
+							) : discover ? (
+								<a
+									href={tmdbPage(discover)}
+									target="_blank"
+									rel="noopener noreferrer"
+									className="flex cursor-pointer items-center gap-2 rounded-pill bg-ink px-6 py-3 text-sm font-semibold text-canvas transition-opacity hover:opacity-90"
 								>
-									More info
-								</button>
-							)}
+									View on TMDB
+								</a>
+							) : null}
 						</div>
 					</motion.div>
 				</AnimatePresence>
 
-				{count > 1 && (
-					<div className="mt-10 flex items-center gap-2">
-						{items.map((item, i) => (
-							<button
-								key={item.Id}
-								type="button"
-								aria-label={`Show ${item.Name ?? `item ${i + 1}`}`}
-								aria-current={i === index % count}
-								onClick={() => setIndex(i)}
-								className={`h-1.5 cursor-pointer rounded-pill transition-all duration-300 ${
-									i === index % count
-										? "w-8 bg-ink"
-										: "w-4 bg-ink/30 hover:bg-ink/60"
-								}`}
-							/>
-						))}
+				{(count > 1 || showDiscoverToggle) && (
+					<div className="mt-10 flex flex-wrap items-center gap-x-8 gap-y-4">
+						{count > 1 && (
+							<div className="flex items-center gap-2">
+								{entries.map((entry, i) => (
+									<button
+										key={entry.key}
+										type="button"
+										aria-label={`Show ${"owned" in entry ? (entry.owned.Name ?? `item ${i + 1}`) : entry.discover.title}`}
+										aria-current={i === index % count}
+										onClick={() => setIndex(i)}
+										className={`h-1.5 cursor-pointer rounded-pill transition-all duration-300 ${
+											i === index % count
+												? "w-8 bg-ink"
+												: "w-4 bg-ink/30 hover:bg-ink/60"
+										}`}
+									/>
+								))}
+							</div>
+						)}
+						{showDiscoverToggle && (
+							<Switch
+								checked={settings.featuredDiscover}
+								onChange={(featuredDiscover) =>
+									updateSettings({ featuredDiscover })
+								}
+								className="glass rounded-pill py-1.5 pl-4 pr-1.5"
+							>
+								<span className="pr-2 text-xs font-medium">
+									Show popular titles I don't have
+								</span>
+							</Switch>
+						)}
 					</div>
 				)}
 			</div>
@@ -228,10 +293,11 @@ export function FeaturedHero({ items, eyebrow }: FeaturedHeroProps) {
 
 /** Same footprint as the hero, so the page doesn't jump when the featured items arrive. */
 export function HeroSkeleton() {
+	const { heroStyle } = useSettings();
 	return (
 		<section
 			aria-hidden
-			className="relative isolate flex min-h-[78dvh] items-end overflow-hidden"
+			className={`relative isolate flex ${heroHeight[heroStyle]} items-end overflow-hidden`}
 		>
 			<div className="page-gutter w-full pb-20 pt-[calc(var(--nav-height)+4rem)]">
 				<div className="shimmer h-4 w-40 rounded-pill" />

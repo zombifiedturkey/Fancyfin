@@ -1,11 +1,12 @@
 import { Link, Navigate, useSearch } from "@tanstack/react-router";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { useEffect } from "react";
 import { hueFor } from "../lib/hue";
 import { backdropImage, imageUrl, logoImage, posterImage } from "../lib/images";
 import { castOf } from "../lib/item-info";
 import { useItem, useSimilarItems } from "../lib/item-queries";
 import { usePeek } from "../lib/peek";
+import { useMotionReduced } from "../lib/settings";
 import { EpisodeList } from "./EpisodeList";
 import { FadeImage } from "./FadeImage";
 import { ItemActions } from "./ItemActions";
@@ -225,7 +226,7 @@ function PanelContent({ itemId }: { itemId: string }) {
 
 function PeekPanel({ itemId }: { itemId: string }) {
 	const { close } = usePeek();
-	const reduceMotion = useReducedMotion();
+	const reduceMotion = useMotionReduced();
 	const duration = reduceMotion ? 0 : 0.28;
 
 	// Lock the page behind the panel, and let Escape close it.

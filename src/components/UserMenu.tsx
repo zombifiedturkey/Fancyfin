@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useAuth, useSession } from "../auth/AuthProvider";
+import { SettingsDialog } from "./SettingsDialog";
 import { UserAvatar } from "./UserAvatar";
 
 /** Avatar button in the nav with a small menu: who you are, and sign out. */
@@ -8,6 +9,7 @@ export function UserMenu() {
 	const session = useSession();
 	const { signOut } = useAuth();
 	const [open, setOpen] = useState(false);
+	const [settingsOpen, setSettingsOpen] = useState(false);
 	const rootRef = useRef<HTMLDivElement>(null);
 	const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -84,6 +86,17 @@ export function UserMenu() {
 							role="menuitem"
 							onClick={() => {
 								setOpen(false);
+								setSettingsOpen(true);
+							}}
+							className="w-full rounded-xl px-3 py-2.5 text-left text-sm text-ink-muted transition-colors hover:bg-glass-strong hover:text-ink"
+						>
+							Settings
+						</button>
+						<button
+							type="button"
+							role="menuitem"
+							onClick={() => {
+								setOpen(false);
 								void signOut();
 							}}
 							className="w-full rounded-xl px-3 py-2.5 text-left text-sm text-ink-muted transition-colors hover:bg-glass-strong hover:text-ink"
@@ -93,6 +106,10 @@ export function UserMenu() {
 					</motion.div>
 				)}
 			</AnimatePresence>
+
+			{settingsOpen && (
+				<SettingsDialog onClose={() => setSettingsOpen(false)} />
+			)}
 		</div>
 	);
 }

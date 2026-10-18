@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, type ProxyOptions } from "vite";
 
 // In dev (and `vite preview`) the app talks to Jellyfin through /api, the same
 // path the production nginx container uses. /api/System/Info -> JELLYFIN_URL/System/Info
@@ -10,7 +10,30 @@ export default defineConfig(({ mode }) => {
 	const env = loadEnv(mode, process.cwd(), "");
 	const jellyfinUrl = env.JELLYFIN_URL || "http://localhost:8096";
 
+	// TMDB, for the featured banner. The key stays in this process; the browser only sees /tmdb.
+	// A "read access token" (it contains dots) goes in a header, a plain API key in the address.
+	const tmdbKey = env.TMDB_API_KEY ?? "";
+	const tmdbIsToken = tmdbKey.includes(".");
+	const tmdbProxy: Record<string, ProxyOptions> = tmdbKey
+		? {
+				"/tmdb": {
+					target: "https://api.themoviedb.org",
+					changeOrigin: true,
+					headers: tmdbIsToken
+						? { Authorization: `Bearer ${tmdbKey}` }
+						: undefined,
+					rewrite: (path: string) => {
+						const rewritten = path.replace(/^\/tmdb/, "/3");
+						if (tmdbIsToken) return rewritten;
+						const joiner = rewritten.includes("?") ? "&" : "?";
+						return `${rewritten}${joiner}api_key=${encodeURIComponent(tmdbKey)}`;
+					},
+				},
+			}
+		: {};
+
 	const proxy = {
+		...tmdbProxy,
 		"/api": {
 			target: jellyfinUrl,
 			changeOrigin: true,

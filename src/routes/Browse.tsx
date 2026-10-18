@@ -4,6 +4,7 @@ import { GenreLink } from "../components/GenreLink";
 import { KindNav } from "../components/KindNav";
 import { LibraryGrid } from "../components/LibraryGrid";
 import { MediaShelf } from "../components/MediaShelf";
+import { useFeatured } from "../lib/featured-queries";
 import {
 	LIBRARY_COPY,
 	type LibraryKind,
@@ -11,7 +12,7 @@ import {
 	type ShelfKey,
 	type ShelfSpec,
 } from "../lib/library";
-import { useFeaturedItems, useGenres, useShelf } from "../lib/queries";
+import { useGenres, useShelf } from "../lib/queries";
 
 /** How many genre rows the browse page shows. The Genres menu lists them all. */
 const GENRE_ROWS = 8;
@@ -64,13 +65,13 @@ function GenreRow({ kind, genre }: { kind: LibraryKind; genre: string }) {
 /** The carousel at the top of a browse page, or a plain title if there's nothing to feature. */
 function BrowseHero({ kind, genre }: { kind: LibraryKind; genre?: string }) {
 	const copy = LIBRARY_COPY[kind];
-	const featured = useFeaturedItems({ kind, genre });
+	const featured = useFeatured({ kind, genre });
 
 	if (featured.isPending) return <HeroSkeleton />;
 	if (featured.data && featured.data.length > 0) {
 		return (
 			<FeaturedHero
-				items={featured.data}
+				entries={featured.data}
 				eyebrow={genre ? `${genre} ${copy.noun}s` : `New in ${copy.title}`}
 			/>
 		);

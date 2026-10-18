@@ -19,4 +19,5 @@
   <DateInstalled/>
   <Config Name="WebUI Port" Target="80" Default="8080" Mode="tcp" Description="Port to open Fancyfin on." Type="Port" Display="always" Required="true" Mask="false">8080</Config>
   <Config Name="Jellyfin URL (optional)" Target="JELLYFIN_URL" Default="" Mode="" Description="Optional. Address of your Jellyfin server as reachable from this container, for example http://192.168.1.20:8096. Leave empty and Fancyfin asks for the address the first time you open it." Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="TMDB API key (optional)" Target="TMDB_API_KEY" Default="" Mode="" Description="Optional. A TMDB API key or read access token. Turns on the 'popular right now' featured banner. It stays on the server and is never sent to the browser. Get one free at themoviedb.org." Type="Variable" Display="always" Required="false" Mask="true"></Config>
 </Container>

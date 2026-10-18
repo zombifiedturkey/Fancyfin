@@ -40,6 +40,9 @@
 		color-scheme: dark;
 		--nav-height: 64px;
 		--page-gutter: clamp(1rem, 4vw, 3.5rem);
+		/* Overridden at runtime by the Settings dialog (see lib/settings-model.ts). */
+		--card-scale: 1;
+		--glass-blur: 24px;
 	}
 
 	html,
@@ -76,6 +79,15 @@
 			transition-duration: 0.01ms !important;
 		}
 	}
+
+	/* The same thing, when the person chose it in Settings. */
+	:root[data-motion="reduced"] *,
+	:root[data-motion="reduced"] *::before,
+	:root[data-motion="reduced"] *::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
 }
 
 @layer components {
@@ -83,7 +95,7 @@
 		background: var(--color-glass);
 		border: 1px solid var(--color-glass-border);
 		/* Tailwind's own blur utilities. A hand-written backdrop-filter was dropped from the production build. */
-		@apply backdrop-blur-[24px] backdrop-saturate-[1.6];
+		@apply backdrop-blur-(--glass-blur) backdrop-saturate-[1.6];
 	}
 
 	.page-gutter {

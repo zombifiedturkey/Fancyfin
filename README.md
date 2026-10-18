@@ -20,6 +20,8 @@ cp .env.example .env.local        # Windows PowerShell: Copy-Item .env.example .
 pnpm dev                          # add --host to open it from your phone on the same network
 ```
 
+Optional: add `TMDB_API_KEY=...` to `.env.local` to turn on the "popular right now" banner (see [Popular banner](#popular-banner-tmdb)).
+
 The app calls Jellyfin through `/api`, which the Vite dev server (and the Docker image's nginx) proxy to `JELLYFIN_URL`. That means no CORS setup is needed on the Jellyfin server.
 
 ### Scripts
@@ -44,6 +46,19 @@ docker compose up --build         # then open http://localhost:8080
 - **Set it** (the address of your Jellyfin server as seen from the container, e.g. `http://192.168.1.20:8096`) and the container proxies to Jellyfin for you. No CORS setup is needed.
 - **Leave it empty** and Fancyfin asks for the Jellyfin address the first time you open it, then remembers it in your browser. In this mode your browser talks to Jellyfin directly, so the address must be reachable from the device you browse on, and (if Fancyfin is served over HTTPS) Jellyfin must be HTTPS too.
 
+### Popular banner (TMDB)
+
+The featured banner on Home and the Movies and TV Shows pages can show what's popular right now, using [TMDB](https://www.themoviedb.org/). Popular titles you own are matched to your library and play as normal. Popular titles you don't own are shown for inspiration, with a "Not in your library" label and a link to TMDB; there is a switch on the banner (and in Settings) to hide them.
+
+1. Create a free TMDB account and copy your API key (or "API Read Access Token") from your account's API settings.
+2. Set it as `TMDB_API_KEY` on the container (or in `.env.local` for `pnpm dev`).
+
+The key stays on the server: the browser only talks to `/tmdb` on your Fancyfin address, and nginx adds the key. Never commit the key to the repository. Without a key the banner shows recently added titles.
+
+### Settings
+
+The avatar menu has **Settings**: accent colour, poster corners and size, glass strength, titles under posters, banner size and source, which Home rows show and in what order, episode layout and animations. They are saved in the browser you change them in.
+
 ### Published images
 
 GitHub Actions builds and publishes to `ghcr.io/zombifiedturkey/fancyfin`:
@@ -65,13 +80,14 @@ GitHub Actions builds and publishes to `ghcr.io/zombifiedturkey/fancyfin`:
    ```
    (Or copy `unraid/fancyfin.xml` from this repo to `\\<unraid>\flash\config\plugins\dockerMan\templates-user\my-fancyfin.xml`.)
 2. **Docker** tab, **Add Container**, then pick **Fancyfin** from the template dropdown.
-3. Adjust the port if 8080 is taken. **Jellyfin URL** is optional: set it, or leave it empty to enter the address in Fancyfin on first use. **Apply**.
+3. Adjust the port if 8080 is taken. **Jellyfin URL** is optional: set it, or leave it empty to enter the address in Fancyfin on first use. **TMDB API key** is optional too (see above). **Apply**.
+   If you installed before the TMDB option existed, edit the container, choose **Add another Path, Port, Variable, Label or Device**, set Config Type **Variable**, Name `TMDB API key`, Key `TMDB_API_KEY`, and put your key in Value.
 4. Open `http://<unraid-ip>:8080`.
 
 **Without the template**
 
 **Docker** tab, **Add Container**, leave the template empty and fill in:
-Repository `ghcr.io/zombifiedturkey/fancyfin:edge`, a port mapping to container port `80`, and optionally a variable `JELLYFIN_URL`.
+Repository `ghcr.io/zombifiedturkey/fancyfin:edge`, a port mapping to container port `80`, and optionally the variables `JELLYFIN_URL` and `TMDB_API_KEY`.
 
 To pick up a new edge build, use **Check for updates** on the Docker tab, then **apply update** on the container. If the package is private, make it public in the repository's package settings on GitHub, or run `docker login ghcr.io` on the server with a token that has `read:packages`.
 

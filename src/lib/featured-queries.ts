@@ -1,0 +1,178 @@
+import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models/base-item-dto";
+import { getLibraryApi } from "@jellyfin/sdk/lib/utils/api/library-api";
+import {
+	type QueryClient,
+	useQuery,
+	useQueryClient,
+} from "@tanstack/react-query";
+import { useSession } from "../auth/AuthProvider";
+import {
+	buildFeatured,
+	type FeaturedEntry,
+	interleave,
+	type PopularMatch,
+} from "./featured";
+import { api } from "./jellyfin";
+import type { LibraryKind } from "./library";
+import { fetchRecentFeatured } from "./queries";
+import { useSettings } from "./settings";
+import {
+	fetchTrending,
+	type TmdbKind,
+	type TmdbTitle,
+	useRuntimeConfig,
+} from "./tmdb";
+
+const POPULAR_CANDIDATES = 14;
+
+/** TMDB id to library item id, for every title of one type in the library. */
+async function fetchTmdbIndex(
+	userId: string,
+	itemType: "Movie" | "Series",
+	signal?: AbortSignal,
+): Promise<Map<number, string>> {
+	const { data } = await getLibraryApi(api).getItems(
+		{
+			userId,
+			includeItemTypes: [itemType],
+			recursive: true,
+			fields: ["ProviderIds"],
+			enableUserData: false,
+			imageTypeLimit: 1,
+			enableImageTypes: ["Primary"],
+		},
+		{ signal },
+	);
+	const index = new Map<number, string>();
+	for (const item of data.Items ?? []) {
+		const tmdbId = Number.parseInt(item.ProviderIds?.Tmdb ?? "", 10);
+		if (item.Id && !Number.isNaN(tmdbId)) index.set(tmdbId, item.Id);
+	}
+	return index;
+}
+
+/** Library items with everything the banner shows. Keyed by id. */
+async function fetchOwned(
+	userId: string,
+	ids: string[],
+	signal?: AbortSignal,
+): Promise<Map<string, BaseItemDto>> {
+	if (ids.length === 0) return new Map();
+	const { data } = await getLibraryApi(api).getItems(
+		{
+			userId,
+			ids,
+			fields: ["Overview", "Genres", "ChildCount"],
+			enableImageTypes: ["Backdrop", "Logo", "Primary"],
+			imageTypeLimit: 1,
+			enableUserData: true,
+		},
+		{ signal },
+	);
+	const items = new Map<string, BaseItemDto>();
+	for (const item of data.Items ?? []) {
+		if (item.Id && item.Overview && (item.BackdropImageTags?.length ?? 0) > 0) {
+			items.set(item.Id, item);
+		}
+	}
+	return items;
+}
+
+/** This week's popular titles from TMDB, each paired with the library's copy when there is one. */
+async function fetchPopular(
+	queryClient: QueryClient,
+	userId: string,
+	kind: LibraryKind | undefined,
+	signal?: AbortSignal,
+): Promise<PopularMatch[]> {
+	const kinds: TmdbKind[] =
+		kind === "movies" ? ["movie"] : kind === "shows" ? ["tv"] : ["movie", "tv"];
+
+	const lists = await Promise.all(
+		kinds.map((tmdbKind) =>
+			queryClient.fetchQuery({
+				queryKey: ["tmdb", "trending", tmdbKind],
+				staleTime: 30 * 60_000,
+				queryFn: ({ signal: s }) => fetchTrending(tmdbKind, s),
+			}),
+		),
+	);
+	const titles: TmdbTitle[] = (
+		lists.length === 2
+			? interleave(lists[0] ?? [], lists[1] ?? [])
+			: (lists[0] ?? [])
+	).slice(0, POPULAR_CANDIDATES);
+
+	const indexes = new Map<TmdbKind, Map<number, string>>();
+	await Promise.all(
+		kinds.map(async (tmdbKind) => {
+			const itemType = tmdbKind === "movie" ? "Movie" : "Series";
+			indexes.set(
+				tmdbKind,
+				await queryClient.fetchQuery({
+					queryKey: ["tmdb-index", userId, itemType],
+					staleTime: 10 * 60_000,
+					queryFn: ({ signal: s }) => fetchTmdbIndex(userId, itemType, s),
+				}),
+			);
+		}),
+	);
+
+	const itemIds = titles.flatMap((title) => {
+		const id = indexes.get(title.kind)?.get(title.id);
+		return id ? [id] : [];
+	});
+	const owned = await fetchOwned(userId, itemIds, signal);
+
+	return titles.flatMap((title): PopularMatch[] => {
+		const id = indexes.get(title.kind)?.get(title.id);
+		if (!id) return [{ title }];
+		const item = owned.get(id);
+		// In the library but without a picture or description: nothing good to show, so skip it.
+		return item ? [{ title, owned: item }] : [];
+	});
+}
+
+/**
+ * The slides for the featured banner, following the viewer's settings: recently added, popular
+ * (from TMDB, if the server has a key), or both. Genre pages always use recently added.
+ */
+export function useFeatured(
+	options: { kind?: LibraryKind; genre?: string } = {},
+) {
+	const { userId } = useSession();
+	const queryClient = useQueryClient();
+	const config = useRuntimeConfig();
+	const settings = useSettings();
+	const { kind, genre } = options;
+
+	const tmdbOn = config.data?.tmdb ?? false;
+	const source = tmdbOn && !genre ? settings.featuredSource : "recent";
+	const discover = settings.featuredDiscover;
+
+	return useQuery({
+		queryKey: [
+			"home",
+			userId,
+			"featured",
+			kind ?? "all",
+			genre ?? "",
+			source,
+			discover,
+		],
+		// Wait to hear whether TMDB is set up, so the banner doesn't change after it appears.
+		enabled: !config.isPending,
+		queryFn: async ({ signal }): Promise<FeaturedEntry[]> => {
+			const recent = await fetchRecentFeatured(userId, { kind, genre }, signal);
+			let popular: PopularMatch[] = [];
+			if (source !== "recent") {
+				try {
+					popular = await fetchPopular(queryClient, userId, kind, signal);
+				} catch {
+					// TMDB unreachable or the key was refused: fall back to recently added.
+				}
+			}
+			return buildFeatured({ source, discover, recent, popular });
+		},
+	});
+}

@@ -54,6 +54,7 @@ export function useSeasons(seriesId: string) {
 					userId,
 					enableUserData: true,
 					enableImages: false,
+					fields: ["ChildCount"],
 				},
 				{ signal },
 			);

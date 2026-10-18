@@ -4,6 +4,7 @@ import { clampPercent, landscapeSubtitle } from "../lib/format";
 import { hueFor } from "../lib/hue";
 import { landscapeImage, posterImage } from "../lib/images";
 import { usePeek } from "../lib/peek";
+import { useSettings } from "../lib/settings";
 import { FadeImage } from "./FadeImage";
 
 type MediaCardProps = {
@@ -16,12 +17,16 @@ type MediaCardProps = {
 
 /** Card widths per variant. The shelf row sizes its items with these too. */
 export const cardWidth = {
-	poster: "w-36 sm:w-44 lg:w-52",
-	landscape: "w-64 sm:w-72 lg:w-80",
+	// The multiplier is the "poster size" setting.
+	poster:
+		"w-[calc(9rem*var(--card-scale))] sm:w-[calc(11rem*var(--card-scale))] lg:w-[calc(13rem*var(--card-scale))]",
+	landscape:
+		"w-[calc(16rem*var(--card-scale))] sm:w-[calc(18rem*var(--card-scale))] lg:w-[calc(20rem*var(--card-scale))]",
 } as const;
 
 export function MediaCard({ item, variant, onSelect }: MediaCardProps) {
 	const peek = usePeek();
+	const { showTitles } = useSettings();
 	const isPoster = variant === "poster";
 	// Episodes lead with the show's name; the episode itself goes on the second line.
 	const title =
@@ -93,9 +98,13 @@ export function MediaCard({ item, variant, onSelect }: MediaCardProps) {
 				)}
 			</div>
 
-			<p className="mt-3 truncate text-sm font-medium">{title}</p>
-			{subtitle && (
-				<p className="truncate text-xs text-ink-muted">{subtitle}</p>
+			{(!isPoster || showTitles) && (
+				<>
+					<p className="mt-3 truncate text-sm font-medium">{title}</p>
+					{subtitle && (
+						<p className="truncate text-xs text-ink-muted">{subtitle}</p>
+					)}
+				</>
 			)}
 		</motion.button>
 	);

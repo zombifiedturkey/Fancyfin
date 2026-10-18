@@ -1,6 +1,7 @@
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { type ReactNode, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { useMotionReduced } from "../lib/settings";
 
 /** A centred glass dialog above everything, including the title panel. Escape closes only this. */
 export function Modal({
@@ -14,7 +15,7 @@ export function Modal({
 	children: ReactNode;
 	size?: "md" | "lg";
 }) {
-	const reduceMotion = useReducedMotion();
+	const reduceMotion = useMotionReduced();
 
 	// Capture phase, so Escape closes this dialog and not the panel underneath.
 	useEffect(() => {

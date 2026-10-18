@@ -17,41 +17,35 @@ import {
 } from "./library";
 
 /**
- * Items for the hero carousel: the newest titles that have a backdrop and a description.
+ * The newest titles that have a backdrop and a description: the featured banner's "recently added" slides.
  * Home mixes movies and shows; a library or genre page narrows it down.
  */
-export function useFeaturedItems(
+export async function fetchRecentFeatured(
+	userId: string,
 	options: { kind?: LibraryKind; genre?: string } = {},
+	signal?: AbortSignal,
 ) {
-	const { userId } = useSession();
 	const { kind, genre } = options;
-	return useQuery({
-		queryKey: ["home", userId, "featured", kind ?? "all", genre ?? ""],
-		queryFn: async ({ signal }) => {
-			const { data } = await getLibraryApi(api).getItems(
-				{
-					userId,
-					includeItemTypes: kind
-						? [LIBRARY_COPY[kind].itemType]
-						: ["Movie", "Series"],
-					genres: genre ? [genre] : undefined,
-					recursive: true,
-					sortBy: ["DateCreated"],
-					sortOrder: ["Descending"],
-					imageTypes: ["Backdrop"],
-					fields: ["Overview", "Genres", "ChildCount"],
-					enableImageTypes: ["Backdrop", "Logo", "Primary"],
-					imageTypeLimit: 1,
-					enableUserData: true,
-					limit: 30,
-				},
-				{ signal },
-			);
-			return (data.Items ?? [])
-				.filter((item) => item.Id && item.Overview)
-				.slice(0, 5);
+	const { data } = await getLibraryApi(api).getItems(
+		{
+			userId,
+			includeItemTypes: kind
+				? [LIBRARY_COPY[kind].itemType]
+				: ["Movie", "Series"],
+			genres: genre ? [genre] : undefined,
+			recursive: true,
+			sortBy: ["DateCreated"],
+			sortOrder: ["Descending"],
+			imageTypes: ["Backdrop"],
+			fields: ["Overview", "Genres", "ChildCount"],
+			enableImageTypes: ["Backdrop", "Logo", "Primary"],
+			imageTypeLimit: 1,
+			enableUserData: true,
+			limit: 30,
 		},
-	});
+		{ signal },
+	);
+	return (data.Items ?? []).filter((item) => item.Id && item.Overview);
 }
 
 /** Partly watched movies and episodes. */

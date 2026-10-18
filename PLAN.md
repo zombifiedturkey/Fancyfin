@@ -83,7 +83,7 @@ For users who are allowed to edit metadata (admins), an Edit menu on the detail 
 - *Refresh metadata:* re-scan the title, optionally replacing existing metadata and images.
 Hidden entirely for users without permission. Needs real-server testing, since these calls change data.
 
-*Status:* Identify / fix match and Refresh metadata are built. **Deferred until the major milestones are done (remind the owner):** the Images picker and the Edit metadata form, plus optional TMDB integration for better artwork and metadata (the key lives in a server-side env var behind the nginx/Vite proxy, never in the repo or browser code).
+*Status:* Done: Identify / fix match, Refresh metadata, the Images picker (provider artwork, upload, remove) and the Edit details form. Still open: optional TMDB integration (see ROADMAP.md).
 
 **M4: Playback core**
 Player UI, direct play, HLS transcode fallback, seek, volume, fullscreen, resume, progress reporting, next-episode flow.
@@ -96,6 +96,10 @@ Search, keyboard shortcuts, mobile layout pass, transitions, loading and error s
 
 **M7: Public release prep**
 README with screenshots, license, contributing guide, versioned image on GHCR, Unraid template, issue templates.
+
+## What's next
+
+See [ROADMAP.md](ROADMAP.md) for the working to-do list.
 
 ## Future (post-v1)
 

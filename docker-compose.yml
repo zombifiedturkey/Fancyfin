@@ -12,3 +12,6 @@ services:
       # Optional. Address of your Jellyfin server as reachable from this container.
       # Leave it out (or empty) and Fancyfin asks for the address the first time you open it.
       JELLYFIN_URL: ""
+      # Optional. A TMDB API key (or read access token) turns on the "popular right now" banner.
+      # It stays on the server; the browser never sees it. Leave it out to use recently added titles.
+      TMDB_API_KEY: ""
