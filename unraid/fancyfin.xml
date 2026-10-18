@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>Fancyfin</Name>
+  <Repository>ghcr.io/zombifiedturkey/fancyfin:edge</Repository>
+  <Registry>https://github.com/zombifiedturkey/Fancyfin/pkgs/container/fancyfin</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/zombifiedturkey/Fancyfin/issues</Support>
+  <Project>https://github.com/zombifiedturkey/Fancyfin</Project>
+  <Overview>A modern, cinematic web client for Jellyfin. Point it at your existing Jellyfin server; the Jellyfin server itself is not changed. The :edge tag follows the latest development build.</Overview>
+  <Category>MediaApp:Video MediaServer:Video</Category>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/zombifiedturkey/Fancyfin/main/unraid/fancyfin.xml</TemplateURL>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <Config Name="WebUI Port" Target="80" Default="8080" Mode="tcp" Description="Port to open Fancyfin on." Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+  <Config Name="Jellyfin URL" Target="JELLYFIN_URL" Default="http://192.168.1.50:8096" Mode="" Description="Address of your Jellyfin server as reachable from this container, for example http://192.168.1.50:8096" Type="Variable" Display="always" Required="true" Mask="false">http://192.168.1.50:8096</Config>
+</Container>

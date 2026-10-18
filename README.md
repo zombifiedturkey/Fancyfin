@@ -53,11 +53,22 @@ GitHub Actions builds and publishes to `ghcr.io/zombifiedturkey/fancyfin`:
 
 ### Unraid
 
-1. **Docker** tab, **Add Container**.
-2. **Repository:** `ghcr.io/zombifiedturkey/fancyfin:edge`
-3. **Port:** container port `80`, host port of your choice (for example `8080`).
-4. **Variable:** `JELLYFIN_URL` set to your Jellyfin address, for example `http://192.168.1.50:8096`.
-5. Apply, then open `http://<unraid-ip>:8080`.
+**Using the template (recommended)**
+
+1. Open the Unraid web terminal (or SSH in) and run:
+   ```bash
+   wget -O /boot/config/plugins/dockerMan/templates-user/my-fancyfin.xml \
+     https://raw.githubusercontent.com/zombifiedturkey/Fancyfin/main/unraid/fancyfin.xml
+   ```
+   (Or copy `unraid/fancyfin.xml` from this repo to `\\<unraid>\flash\config\plugins\dockerMan\templates-user\my-fancyfin.xml`.)
+2. **Docker** tab, **Add Container**, then pick **Fancyfin** from the template dropdown.
+3. Set **Jellyfin URL** to your Jellyfin address, for example `http://192.168.1.50:8096`, adjust the port if 8080 is taken, and **Apply**.
+4. Open `http://<unraid-ip>:8080`.
+
+**Without the template**
+
+**Docker** tab, **Add Container**, leave the template empty and fill in:
+Repository `ghcr.io/zombifiedturkey/fancyfin:edge`, a port mapping to container port `80`, and a variable `JELLYFIN_URL`.
 
 To pick up a new edge build, use **Check for updates** on the Docker tab, then **apply update** on the container. If the package is private, make it public in the repository's package settings on GitHub, or run `docker login ghcr.io` on the server with a token that has `read:packages`.
 
