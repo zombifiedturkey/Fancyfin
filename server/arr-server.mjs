@@ -48,7 +48,7 @@ export function normalizeUrl(input) {
 
 /** Keys are letters, digits and . _ - only; anything else is not a real Radarr/Sonarr key. */
 export function validKey(key) {
-	return typeof key === "string" && /^[A-Za-z0-9._-]{8,200}$/.test(key);
+	return typeof key === "string" && /^[A-Za-z0-9._-]{8,1000}$/.test(key);
 }
 
 /**
