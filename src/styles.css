@@ -1,0 +1,130 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+/*
+ * Design tokens. Tailwind v4 turns every --color-*, --radius-*, --ease-* and
+ * --font-* variable below into utilities (bg-canvas, text-ink-muted, rounded-card ...).
+ * Change the look of the whole app from here.
+ */
+@theme {
+	--font-sans:
+		"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+		sans-serif;
+
+	--color-canvas: #07080b;
+	--color-canvas-raised: #0d0f14;
+	--color-ink: #f5f7fa;
+	--color-ink-muted: #9aa3b2;
+	--color-ink-faint: #5d6675;
+	--color-accent: #6ea8ff;
+	--color-accent-strong: #8fbaff;
+	--color-glass: rgb(255 255 255 / 0.06);
+	--color-glass-strong: rgb(255 255 255 / 0.1);
+	--color-glass-border: rgb(255 255 255 / 0.1);
+	--color-success: #58d68d;
+	--color-danger: #ff6b6b;
+
+	--radius-card: 14px;
+	--radius-pill: 999px;
+
+	--ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+	--ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+	--shadow-card: 0 18px 40px -12px rgb(0 0 0 / 0.7);
+	--shadow-glow:
+		0 0 0 1px rgb(255 255 255 / 0.18), 0 24px 60px -16px rgb(110 168 255 / 0.35);
+}
+
+@layer base {
+	:root {
+		color-scheme: dark;
+		--nav-height: 64px;
+		--page-gutter: clamp(1rem, 4vw, 3.5rem);
+	}
+
+	html,
+	body,
+	#root {
+		min-height: 100%;
+	}
+
+	body {
+		background: var(--color-canvas);
+		color: var(--color-ink);
+		font-family: var(--font-sans);
+		font-feature-settings: "cv11", "ss01";
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+		overflow-x: hidden;
+	}
+
+	:focus-visible {
+		outline: 2px solid var(--color-accent);
+		outline-offset: 3px;
+	}
+
+	::selection {
+		background: rgb(110 168 255 / 0.35);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		*,
+		*::before,
+		*::after {
+			animation-duration: 0.01ms !important;
+			animation-iteration-count: 1 !important;
+			transition-duration: 0.01ms !important;
+		}
+	}
+}
+
+@layer components {
+	.glass {
+		background: var(--color-glass);
+		border: 1px solid var(--color-glass-border);
+		backdrop-filter: blur(24px) saturate(160%);
+		-webkit-backdrop-filter: blur(24px) saturate(160%);
+	}
+
+	.page-gutter {
+		padding-inline: var(--page-gutter);
+	}
+
+	/* Left-aligned content. Everything starts at the same left margin as the nav and hero text. */
+	.content-column {
+		padding-inline: var(--page-gutter);
+	}
+
+	/* For scrolling rows: start on that same left margin, then scroll off the right edge. */
+	.content-inset {
+		padding-inline: var(--page-gutter);
+		scroll-padding-inline: var(--page-gutter);
+	}
+
+	.shimmer {
+		background-image: linear-gradient(
+			100deg,
+			rgb(255 255 255 / 0.04) 20%,
+			rgb(255 255 255 / 0.1) 40%,
+			rgb(255 255 255 / 0.04) 60%
+		);
+		background-size: 200% 100%;
+		animation: shimmer 2.4s linear infinite;
+	}
+
+	.hide-scrollbar {
+		scrollbar-width: none;
+	}
+	.hide-scrollbar::-webkit-scrollbar {
+		display: none;
+	}
+}
+
+@keyframes shimmer {
+	from {
+		background-position: 200% 0;
+	}
+	to {
+		background-position: -200% 0;
+	}
+}

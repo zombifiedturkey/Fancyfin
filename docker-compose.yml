@@ -1,0 +1,13 @@
+services:
+  fancyfin:
+    # Build locally:
+    build: .
+    # ...or use the published image (:edge follows main, :latest follows releases):
+    # image: ghcr.io/zombifiedturkey/fancyfin:edge
+    container_name: fancyfin
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      # Address of your Jellyfin server as reachable from this container.
+      JELLYFIN_URL: "http://192.168.1.50:8096"

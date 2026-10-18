@@ -1,0 +1,3 @@
+allowBuilds:
+  # Needed by jassub (subtitle renderer); its install script is not required, so keep it off.
+  lfa-ponyfill: false
