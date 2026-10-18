@@ -12,6 +12,7 @@ import { AddToArrButton } from "./AddToArrButton";
 import { Switch } from "./controls";
 import { FadeImage } from "./FadeImage";
 import { PlayButton } from "./PlayButton";
+import { ReleaseLine } from "./ReleaseLine";
 
 const SLIDE_MS = 9000;
 
@@ -196,6 +197,7 @@ export function FeaturedHero({ entries, eyebrow }: FeaturedHeroProps) {
 								{meta.join("  ·  ")}
 							</p>
 						)}
+						{discover && <ReleaseLine key={discover.id} title={discover} />}
 						{genres.length > 0 && (
 							<p className="mt-1 text-sm text-ink-muted">{genres.join(", ")}</p>
 						)}
