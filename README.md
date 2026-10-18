@@ -8,6 +8,23 @@ Fancyfin talks only to the public Jellyfin API, so your server stays stock and u
 
 > **Status:** first release (0.1). Browsing, detail pages, playback (direct play and HLS transcode), subtitles (SRT, VTT, ASS/SSA, burned-in image subs), audio track selection and search all work. Expect rough edges.
 
+## Install on Unraid (Community Apps)
+
+Fancyfin is in the Unraid Community Applications store.
+
+1. In Unraid, open the **Apps** tab and search for **Fancyfin**.
+2. Click **Install**.
+3. On the install page, check the settings:
+   - **WebUI Port**: the port to open Fancyfin on (default `8282`).
+   - **Jellyfin URL** (optional): your Jellyfin address as the container sees it, for example `http://192.168.1.20:8096`. Leave it empty and Fancyfin asks the first time you open it.
+   - **Config**: a folder in your appdata (default `/mnt/user/appdata/fancyfin`). It keeps your TMDB, Radarr and Sonarr connections, so they survive updates.
+4. Click **Apply**, then open `http://<unraid-ip>:8282` (or click the container's icon on the **Docker** tab and choose **WebUI**).
+5. Sign in with your Jellyfin account. Connect TMDB, Radarr and Sonarr from the avatar menu under **Settings**.
+
+To update, use **Check for updates** on the **Docker** tab, then **apply update**.
+
+More ways to run it (Docker, compose, the template without Community Apps) are under [Docker](#docker) and [Unraid](#unraid).
+
 ## Screenshots
 
 | | |
@@ -96,11 +113,11 @@ GitHub Actions builds and publishes to `ghcr.io/zombifiedturkey/fancyfin`:
 
 ### Unraid
 
-**From Community Apps (once listed)**
+**From Community Apps (recommended)**
 
-Open the **Apps** tab, search for **Fancyfin**, click **Install**, check the port (default `8282`), the optional **Jellyfin URL** and the **Config** folder, then **Apply**. Open `http://<unraid-ip>:8282`.
+See [Install on Unraid (Community Apps)](#install-on-unraid-community-apps) above.
 
-**Using the template directly**
+**Using the template directly** (if you can't use the Apps tab)
 
 1. Open the Unraid web terminal (or SSH in) and run:
    ```bash
