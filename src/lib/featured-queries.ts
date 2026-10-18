@@ -19,7 +19,8 @@ import { fetchRecentFeatured } from "./queries";
 import { useSettings } from "./settings";
 import {
 	fetchGenres,
-	fetchPopularInGenres,
+	fetchKeywordIds,
+	fetchPopularIn,
 	fetchTrending,
 	matchGenreIds,
 	type TmdbKind,
@@ -121,7 +122,8 @@ export async function loadIndexes(
 	return indexes;
 }
 
-/** The most popular titles in a genre, one list per kind. A genre TMDB has no match for gives []. */
+/** The most popular titles in a genre, one list per kind. A genre TMDB has no match for gives []
+ * (after trying a keyword of that name). */
 function loadGenrePopular(
 	queryClient: QueryClient,
 	kinds: TmdbKind[],
@@ -135,11 +137,26 @@ function loadGenrePopular(
 				queryFn: ({ signal: s }) => fetchGenres(tmdbKind, s),
 			});
 			const ids = matchGenreIds(genre, genres);
-			if (ids.length === 0) return [];
+			if (ids.length > 0) {
+				return queryClient.fetchQuery({
+					queryKey: ["tmdb", "genre-popular", tmdbKind, ids.join(",")],
+					staleTime: 30 * 60_000,
+					queryFn: ({ signal: s }) =>
+						fetchPopularIn(tmdbKind, { genres: ids }, s),
+				});
+			}
+			// TMDB has no such genre (Horror on TV, say): use the keyword of that name instead.
+			const keywords = await queryClient.fetchQuery({
+				queryKey: ["tmdb", "keyword", genre.toLowerCase()],
+				staleTime: 24 * 60 * 60_000,
+				queryFn: ({ signal: s }) => fetchKeywordIds(genre, s),
+			});
+			if (keywords.length === 0) return [];
 			return queryClient.fetchQuery({
-				queryKey: ["tmdb", "genre-popular", tmdbKind, ids.join(",")],
+				queryKey: ["tmdb", "keyword-popular", tmdbKind, keywords.join(",")],
 				staleTime: 30 * 60_000,
-				queryFn: ({ signal: s }) => fetchPopularInGenres(tmdbKind, ids, s),
+				queryFn: ({ signal: s }) =>
+					fetchPopularIn(tmdbKind, { keywords }, s),
 			});
 		}),
 	);

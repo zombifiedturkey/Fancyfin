@@ -67,6 +67,22 @@ export const LIBRARY_COPY: Record<
 	shows: { title: "TV Shows", itemType: "Series", noun: "show" },
 };
 
+/**
+ * Genres to always offer, even when no title in the library has them. TMDB has no Horror genre for
+ * TV, so TV libraries often have none either, but it is a category people look for.
+ */
+const ALWAYS_GENRES: Record<LibraryKind, string[]> = {
+	movies: [],
+	shows: ["Horror"],
+};
+
+/** The server's genres plus the always-offered ones, sorted by name, each once. */
+export function withAlwaysGenres(kind: LibraryKind, names: string[]): string[] {
+	const have = new Set(names.map((name) => name.toLowerCase()));
+	const extra = ALWAYS_GENRES[kind].filter((name) => !have.has(name.toLowerCase()));
+	return [...names, ...extra].sort((a, b) => a.localeCompare(b));
+}
+
 /** Defaults for a sort key, used when the user picks a new sort. */
 export function sortDefaults(key: SortKey): boolean {
 	return SORT_OPTIONS.find((o) => o.key === key)?.defaultDescending ?? true;

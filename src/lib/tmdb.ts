@@ -182,6 +182,34 @@ export function matchGenreIds(name: string, genres: TmdbGenre[]): number[] {
 		.map((genre) => genre.id);
 }
 
+/** Read TMDB's keyword search: the ids of keywords named exactly like the search (ignoring case). */
+export function parseKeywordIds(term: string, json: unknown): number[] {
+	const results = (json as { results?: unknown } | null)?.results;
+	if (!Array.isArray(results)) return [];
+	const wanted = term.trim().toLowerCase();
+	return results.flatMap((raw): number[] => {
+		const row = raw as { id?: unknown; name?: unknown } | null;
+		return typeof row?.id === "number" &&
+			typeof row.name === "string" &&
+			row.name.trim().toLowerCase() === wanted
+			? [row.id]
+			: [];
+	});
+}
+
+/** TMDB keywords with exactly this name, for genres TMDB doesn't have (like Horror on TV). */
+export async function fetchKeywordIds(
+	term: string,
+	signal?: AbortSignal,
+): Promise<number[]> {
+	const response = await fetch(
+		`/tmdb/search/keyword?query=${encodeURIComponent(term)}`,
+		{ signal },
+	);
+	if (!response.ok) throw new Error(`TMDB ${response.status}`);
+	return parseKeywordIds(term, await response.json());
+}
+
 /** TMDB's genre list for movies or shows. */
 export async function fetchGenres(
 	kind: TmdbKind,
@@ -194,14 +222,19 @@ export async function fetchGenres(
 	return parseGenres(await response.json());
 }
 
-/** The most popular titles in one or more genres (any of them), most popular first. */
-export async function fetchPopularInGenres(
+/**
+ * The most popular titles in one or more genres, or tagged with one or more keywords (any of
+ * them), most popular first.
+ */
+export async function fetchPopularIn(
 	kind: TmdbKind,
-	genreIds: number[],
+	filter: { genres: number[] } | { keywords: number[] },
 	signal?: AbortSignal,
 ): Promise<TmdbTitle[]> {
 	const params = new URLSearchParams({
-		with_genres: genreIds.join("|"),
+		...("genres" in filter
+			? { with_genres: filter.genres.join("|") }
+			: { with_keywords: filter.keywords.join("|") }),
 		sort_by: "popularity.desc",
 		"vote_count.gte": "50",
 		include_adult: "false",

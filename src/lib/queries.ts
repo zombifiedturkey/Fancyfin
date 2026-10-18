@@ -14,6 +14,7 @@ import {
 	type LibraryKind,
 	type LibraryPrefs,
 	type ShelfSpec,
+	withAlwaysGenres,
 } from "./library";
 
 /**
@@ -169,9 +170,12 @@ export function useGenres(kind: LibraryKind) {
 				},
 				{ signal },
 			);
-			return (data.Items ?? [])
-				.map((genre) => genre.Name)
-				.filter((name): name is string => Boolean(name));
+			return withAlwaysGenres(
+				kind,
+				(data.Items ?? [])
+					.map((genre) => genre.Name)
+					.filter((name): name is string => Boolean(name)),
+			);
 		},
 	});
 }

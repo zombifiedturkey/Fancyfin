@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	matchGenreIds,
 	parseGenres,
+	parseKeywordIds,
 	parseSearch,
 	parseTrending,
 	parseTvdbId,
@@ -168,5 +169,21 @@ describe("genres", () => {
 	it("gives nothing for a genre TMDB doesn't have", () => {
 		expect(matchGenreIds("Anime", movie)).toEqual([]);
 		expect(matchGenreIds("", movie)).toEqual([]);
+	});
+});
+
+describe("parseKeywordIds", () => {
+	it("keeps only keywords named exactly like the search", () => {
+		expect(
+			parseKeywordIds("horror", {
+				results: [
+					{ id: 315058, name: "horror" },
+					{ id: 1, name: "horror movie" },
+					{ id: 2, name: "Horror" },
+					{ bad: true },
+				],
+			}),
+		).toEqual([315058, 2]);
+		expect(parseKeywordIds("x", null)).toEqual([]);
 	});
 });

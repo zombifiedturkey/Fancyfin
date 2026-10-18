@@ -6,6 +6,7 @@ import {
 	sanitizePrefs,
 	savePrefs,
 	sortDefaults,
+	withAlwaysGenres,
 } from "./library";
 
 describe("sanitizePrefs", () => {
@@ -102,5 +103,28 @@ describe("saved preferences", () => {
 		savePrefs("movies", prefs);
 		expect(loadPrefs("movies")).toEqual(prefs);
 		expect(loadPrefs("shows")).toEqual(DEFAULT_PREFS);
+	});
+});
+
+describe("withAlwaysGenres", () => {
+	it("adds Horror to TV when the library has none, in order", () => {
+		expect(withAlwaysGenres("shows", ["Comedy", "Drama"])).toEqual([
+			"Comedy",
+			"Drama",
+			"Horror",
+		]);
+		expect(withAlwaysGenres("shows", ["Action", "Mystery"])).toEqual([
+			"Action",
+			"Horror",
+			"Mystery",
+		]);
+	});
+
+	it("doesn't repeat a genre the library has, or touch movies", () => {
+		expect(withAlwaysGenres("shows", ["horror", "Comedy"])).toEqual([
+			"Comedy",
+			"horror",
+		]);
+		expect(withAlwaysGenres("movies", ["Comedy"])).toEqual(["Comedy"]);
 	});
 });
