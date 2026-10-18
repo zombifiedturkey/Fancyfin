@@ -1,0 +1,26 @@
+name: GitHub release
+
+# Creates a GitHub release for a tag like v0.1.0, using the newest section of CHANGELOG.md as its notes.
+# (The container image for the tag is built by the "Publish image" workflow. Tags like tv-v0.1.0 are
+# the Android TV app and are handled by "Android TV app".)
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Notes for this version
+        run: |
+          # From the first "## " heading to just before the next one.
+          awk '/^## /{n++; next} n==1' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then echo "See CHANGELOG.md." > release-notes.md; fi
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Fancyfin ${{ github.ref_name }}
+          body_path: release-notes.md

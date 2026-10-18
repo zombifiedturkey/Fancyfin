@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<CommunityApplications>
+  <Profile>Fancyfin is a modern, cinematic web client for Jellyfin: a polished way to browse and watch your library, with glass-style panels, a featured banner of what is popular right now, and one-click adding of missing titles to Radarr and Sonarr. It talks only to the public Jellyfin API, so your Jellyfin server is not changed. Support and ideas are welcome as issues on GitHub.</Profile>
+  <Icon>https://raw.githubusercontent.com/zombifiedturkey/Fancyfin/main/public/icon-512.png</Icon>
+  <WebPage>https://github.com/zombifiedturkey/Fancyfin</WebPage>
+</CommunityApplications>

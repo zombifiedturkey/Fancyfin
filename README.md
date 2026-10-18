@@ -6,7 +6,7 @@ A modern, cinematic web client for Jellyfin. Beautiful browsing, smooth playback
 
 Fancyfin talks only to the public Jellyfin API, so your server stays stock and updates never break it. See [PLAN.md](PLAN.md) for goals, stack and milestones.
 
-> **Status:** early development. Browsing, detail pages, playback (direct play and HLS transcode), subtitles (SRT, VTT, ASS/SSA, burned-in image subs), audio track selection and search all work. Expect rough edges.
+> **Status:** first release (0.1). Browsing, detail pages, playback (direct play and HLS transcode), subtitles (SRT, VTT, ASS/SSA, burned-in image subs), audio track selection and search all work. Expect rough edges.
 
 ## Local development
 
@@ -40,7 +40,7 @@ The app calls Jellyfin through `/api`, which the Vite dev server (and the Docker
 ## Docker
 
 ```bash
-docker compose up --build         # then open http://localhost:8080
+docker compose up --build         # then open http://localhost:8282
 ```
 
 `JELLYFIN_URL` is optional:
@@ -87,7 +87,11 @@ GitHub Actions builds and publishes to `ghcr.io/zombifiedturkey/fancyfin`:
 
 ### Unraid
 
-**Using the template (recommended)**
+**From Community Apps (once listed)**
+
+Open the **Apps** tab, search for **Fancyfin**, click **Install**, check the port (default `8282`), the optional **Jellyfin URL** and the **Config** folder, then **Apply**. Open `http://<unraid-ip>:8282`.
+
+**Using the template directly**
 
 1. Open the Unraid web terminal (or SSH in) and run:
    ```bash
@@ -96,16 +100,24 @@ GitHub Actions builds and publishes to `ghcr.io/zombifiedturkey/fancyfin`:
    ```
    (Or copy `unraid/fancyfin.xml` from this repo to `\\<unraid>\flash\config\plugins\dockerMan\templates-user\my-fancyfin.xml`.)
 2. **Docker** tab, **Add Container**, then pick **Fancyfin** from the template dropdown.
-3. Adjust the port if 8080 is taken. **Jellyfin URL** is optional: set it, or leave it empty to enter the address in Fancyfin on first use. **Config** maps `/config` to a folder in your appdata (it keeps your TMDB, Radarr and Sonarr connections, which you set up in Settings). **Apply**.
-   If you set a `TMDB API key` variable on an earlier version, it is no longer used: remove it and enter the key in Settings instead.
-4. Open `http://<unraid-ip>:8080`.
+3. Adjust the port if 8282 is taken. **Jellyfin URL** is optional: set it, or leave it empty to enter the address in Fancyfin on first use. **Config** maps `/config` to a folder in your appdata (it keeps your TMDB, Radarr and Sonarr connections, which you set up in Settings). **Apply**.
+4. Open `http://<unraid-ip>:8282`.
 
 **Without the template**
 
 **Docker** tab, **Add Container**, leave the template empty and fill in:
-Repository `ghcr.io/zombifiedturkey/fancyfin:edge`, a port mapping to container port `80`, and optionally the variable `JELLYFIN_URL`, and a path mapping `/config` to a folder in your appdata.
+Repository `ghcr.io/zombifiedturkey/fancyfin:latest`, a port mapping to container port `80`, and optionally the variable `JELLYFIN_URL`, and a path mapping `/config` to a folder in your appdata.
 
-To pick up a new edge build, use **Check for updates** on the Docker tab, then **apply update** on the container. If the package is private, make it public in the repository's package settings on GitHub, or run `docker login ghcr.io` on the server with a token that has `read:packages`.
+Use the `edge` tag instead of `latest` for the development build. To update, use **Check for updates** on the Docker tab, then **apply update**. If pulling fails, make sure the package is public in the repository's package settings on GitHub.
+
+## Releasing (maintainers)
+
+1. Move the notes in `CHANGELOG.md` under a new `## x.y.z` heading, and set `version` in `package.json`.
+2. Commit and push to `main`, wait for CI to pass.
+3. Tag and push: `git tag vx.y.z && git push origin vx.y.z`. This publishes the image as `:latest` and `:x.y.z` and creates the GitHub release.
+4. The Unraid template follows `:latest`, so installs pick the update up through **Check for updates**.
+
+The Android TV app is released separately with `tv-v*` tags.
 
 ## License
 

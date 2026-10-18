@@ -11,6 +11,10 @@ RUN pnpm build
 
 # ---- Serve it with nginx ----
 FROM nginx:stable-alpine
+LABEL org.opencontainers.image.title="Fancyfin" \
+      org.opencontainers.image.description="A modern, cinematic web client for Jellyfin" \
+      org.opencontainers.image.source="https://github.com/zombifiedturkey/Fancyfin" \
+      org.opencontainers.image.licenses="MIT"
 RUN apk add --no-cache nodejs
 # At start-up, docker/10-fancyfin-proxy.sh turns the optional JELLYFIN_URL into the /api proxy config
 # (without it the app asks for the Jellyfin address in the browser). docker/20-fancyfin-settings-service.sh
