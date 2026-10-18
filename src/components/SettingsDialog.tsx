@@ -8,7 +8,7 @@ import {
 	moveRow,
 } from "../lib/settings-model";
 import { useTmdbEnabled } from "../lib/tmdb";
-import { ArrSettings } from "./ArrSettings";
+import { ArrSettings, TmdbSettings } from "./ArrSettings";
 import { Segmented, Switch } from "./controls";
 import { Modal } from "./Modal";
 
@@ -181,7 +181,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 					hint={
 						tmdb
 							? "Popular titles come from TMDB and are matched to your library."
-							: "TMDB isn't set up on this server, so the banner shows recently added titles."
+							: "TMDB isn't connected (see TMDB below), so the banner shows recently added titles."
 					}
 				>
 					<Segmented
@@ -260,6 +260,10 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 						))}
 					</ul>
 				</Setting>
+			</Section>
+
+			<Section title="TMDB">
+				<TmdbSettings />
 			</Section>
 
 			<Section title="Radarr and Sonarr">

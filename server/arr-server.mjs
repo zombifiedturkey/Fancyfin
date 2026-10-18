@@ -3,6 +3,7 @@
 // browser. It:
 //   - keeps the Radarr and Sonarr address and key in a file in the config folder, and
 //   - passes a short list of calls on to Radarr and Sonarr, adding the key.
+// It also holds the TMDB key and passes TMDB calls on (/tmdb/), for the same reason.
 // No dependencies: Node 22's built-in http and fetch are enough.
 import { randomBytes } from "node:crypto";
 import { statSync } from "node:fs";
@@ -15,6 +16,13 @@ export const APPS = {
 	radarr: { name: "Radarr", kind: "movie", list: "movie" },
 	sonarr: { name: "Sonarr", kind: "series", list: "series" },
 };
+
+const TMDB_BASE = "https://api.themoviedb.org/3";
+/** The parts of TMDB the app uses; everything else is refused. */
+const TMDB_PATHS =
+	/^(trending|search|discover|genre|movie|tv|configuration)(\/|$)/;
+const TMDB_CACHE_MS = 30 * 60_000;
+const TMDB_CACHE_MAX = 500;
 
 const MAX_BODY = 1024 * 1024;
 const COUNT_CACHE_MS = 60_000;
@@ -76,6 +84,7 @@ async function readConfig(file) {
 	try {
 		const data = JSON.parse(await readFile(file, "utf8"));
 		const out = {};
+		if (validKey(data?.tmdb?.key)) out.tmdb = { key: data.tmdb.key };
 		for (const app of Object.keys(APPS)) {
 			const entry = data?.[app];
 			if (
@@ -109,9 +118,26 @@ class HttpFailure extends Error {
 }
 
 /** Create the request handler. Separate from listen() so tests can start it on any port. */
-export function createServer({ configDir }) {
+export function createServer({ configDir, tmdbBase = TMDB_BASE }) {
 	const { file, persistent } = configLocation(configDir);
 	const counts = new Map();
+	const tmdbCache = new Map();
+
+	/** Call TMDB with the key: a read access token (it has dots) goes in a header, a key in the address. */
+	async function callTmdb(key, sub, search) {
+		const url = new URL(`${tmdbBase}/${sub}`);
+		for (const [name, value] of new URLSearchParams(search)) {
+			if (name !== "api_key") url.searchParams.append(name, value);
+		}
+		const headers = { Accept: "application/json" };
+		if (key.includes(".")) headers.Authorization = `Bearer ${key}`;
+		else url.searchParams.set("api_key", key);
+		try {
+			return await fetch(url, { headers, signal: AbortSignal.timeout(20_000) });
+		} catch {
+			throw new HttpFailure(502, "Fancyfin couldn't reach TMDB.");
+		}
+	}
 
 	/** Call Radarr or Sonarr with a key. Returns the fetch Response. */
 	async function callApp(app, config, method, apiPath, body) {
@@ -213,8 +239,92 @@ export function createServer({ configDir }) {
 		response.end(text);
 	}
 
+	/** GET /tmdb/...  passed on to TMDB with the saved key, and kept for a while. */
+	async function handleTmdb(request, response, url) {
+		if (request.method !== "GET") throw new HttpFailure(405, "Not allowed.");
+		const sub = url.pathname.replace(/^\/tmdb\//, "");
+		if (!TMDB_PATHS.test(sub)) throw new HttpFailure(404, "Not found.");
+		const key = (await readConfig(file)).tmdb?.key;
+		if (!key) throw new HttpFailure(404, "TMDB isn't connected yet.");
+
+		const cacheKey = `${key.slice(-6)}|${sub}${url.search}`;
+		const hit = tmdbCache.get(cacheKey);
+		if (hit && hit.until > Date.now()) {
+			return send(response, 200, hit.text, {
+				"Cache-Control": "private, max-age=600",
+			});
+		}
+		const upstream = await callTmdb(key, sub, url.search);
+		if (upstream.status === 401 || upstream.status === 403) {
+			throw new HttpFailure(
+				424,
+				"TMDB refused the saved API key. Reconnect it in Settings.",
+			);
+		}
+		const text = await upstream.text();
+		if (upstream.ok) {
+			if (tmdbCache.size >= TMDB_CACHE_MAX) tmdbCache.clear();
+			tmdbCache.set(cacheKey, { text, until: Date.now() + TMDB_CACHE_MS });
+		}
+		return send(response, upstream.status, text, {
+			"Cache-Control": upstream.ok ? "private, max-age=600" : "no-store",
+		});
+	}
+
+	/** GET, PUT { key } and DELETE on /arr/tmdb: the TMDB key saved from Settings. */
+	async function handleTmdbSettings(request, response) {
+		const method = request.method ?? "GET";
+		const config = await readConfig(file);
+		if (method === "GET") {
+			return send(response, 200, { configured: Boolean(config.tmdb) });
+		}
+		if (method === "DELETE") {
+			delete config.tmdb;
+			await writeConfig(file, config);
+			tmdbCache.clear();
+			return send(response, 200, { configured: false });
+		}
+		if (method !== "PUT") throw new HttpFailure(405, "Not allowed.");
+
+		let input;
+		try {
+			input = JSON.parse((await readBody(request)).toString("utf8"));
+		} catch {
+			throw new HttpFailure(400, "That wasn't valid JSON.");
+		}
+		const key = typeof input?.key === "string" ? input.key.trim() : "";
+		if (!key) {
+			throw new HttpFailure(
+				400,
+				"Enter your TMDB API key (themoviedb.org, Settings, API).",
+			);
+		}
+		if (!validKey(key))
+			throw new HttpFailure(400, "That doesn't look like a TMDB API key.");
+		const check = await callTmdb(key, "configuration", "");
+		if (check.status === 401 || check.status === 403) {
+			throw new HttpFailure(400, "TMDB refused that API key.");
+		}
+		if (!check.ok) {
+			throw new HttpFailure(
+				400,
+				`TMDB answered with an error (${check.status}).`,
+			);
+		}
+		config.tmdb = { key };
+		await writeConfig(file, config);
+		tmdbCache.clear();
+		return send(response, 200, { configured: true });
+	}
+
 	async function handle(request, response) {
 		const url = new URL(request.url ?? "/", "http://local");
+		if (url.pathname.startsWith("/tmdb/")) {
+			return handleTmdb(request, response, url);
+		}
+		if (url.pathname === "/arr/tmdb") {
+			return handleTmdbSettings(request, response);
+		}
 		const parts = url.pathname
 			.replace(/^\/arr\/?/, "")
 			.split("/")

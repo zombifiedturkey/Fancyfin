@@ -13,7 +13,7 @@ The working to-do list. `PLAN.md` holds the original goals and milestones; this 
 
 ### 1. Featured content bar from TMDB popularity (built, needs testing)
 
-- [x] Server-side TMDB proxy (`TMDB_API_KEY` environment variable; nginx in Docker, Vite in dev). The key never reaches the browser.
+- [x] Server-side TMDB proxy. The key is entered in Settings and saved on the server (`/config`); the settings service adds it to the calls, so it never reaches the browser.
 - [x] `config.json` reports whether TMDB is set up, so the app falls back to recently added when it isn't.
 - [x] TMDB trending (movies and TV), matched to the library by TMDB id, ordered by popularity.
 - [x] Popular titles not in the library are shown for inspiration, with a "Not in your library" label and a link to TMDB.

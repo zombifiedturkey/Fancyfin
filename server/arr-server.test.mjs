@@ -277,3 +277,117 @@ describe("service", () => {
 		);
 	});
 });
+
+describe("TMDB", () => {
+	const KEY = "abcd1234efgh5678";
+	const TOKEN = "aaaa.bbbb.cccc";
+	let fake;
+	let seen;
+	let service;
+	let base;
+	let dir;
+
+	const call = async (method, url, body) => {
+		const response = await fetch(`${base}${url}`, {
+			method,
+			headers: body ? { "Content-Type": "application/json" } : {},
+			body: body ? JSON.stringify(body) : undefined,
+		});
+		const text = await response.text();
+		let json;
+		try {
+			json = JSON.parse(text);
+		} catch {
+			json = undefined;
+		}
+		return { status: response.status, json };
+	};
+
+	beforeAll(async () => {
+		seen = [];
+		fake = http.createServer((req, res) => {
+			const url = new URL(req.url, "http://x");
+			seen.push({ path: url.pathname, query: url.search, auth: req.headers.authorization });
+			const ok =
+				url.searchParams.get("api_key") === KEY ||
+				req.headers.authorization === `Bearer ${TOKEN}`;
+			if (!ok) return void res.writeHead(401).end("{}");
+			res
+				.writeHead(200, { "Content-Type": "application/json" })
+				.end(JSON.stringify({ results: [], path: url.pathname }));
+		});
+		const port = await listen(fake);
+		dir = await mkdtemp(path.join(tmpdir(), "fancyfin-tmdb-"));
+		service = createServer({
+			configDir: dir,
+			tmdbBase: `http://127.0.0.1:${port}/3`,
+		});
+		base = `http://127.0.0.1:${await listen(service)}`;
+	});
+
+	afterAll(() => {
+		fake.close();
+		service.close();
+	});
+
+	it("starts disconnected, and says so to the app", async () => {
+		expect((await call("GET", "/arr/tmdb")).json).toEqual({ configured: false });
+		expect((await call("GET", "/tmdb/trending/movie/week")).status).toBe(404);
+	});
+
+	it("refuses a bad key and saves nothing", async () => {
+		expect((await call("PUT", "/arr/tmdb", { key: "" })).status).toBe(400);
+		expect((await call("PUT", "/arr/tmdb", { key: "no good!" })).status).toBe(400);
+		const wrong = await call("PUT", "/arr/tmdb", { key: "wrongwrong1234" });
+		expect(wrong.status).toBe(400);
+		expect(wrong.json.message).toMatch(/refused/);
+		expect((await call("GET", "/arr/tmdb")).json.configured).toBe(false);
+	});
+
+	it("saves a working key and never returns it", async () => {
+		const saved = await call("PUT", "/arr/tmdb", { key: KEY });
+		expect(saved.json).toEqual({ configured: true });
+		expect(
+			JSON.stringify((await call("GET", "/arr/tmdb")).json).includes(KEY),
+		).toBe(false);
+		const file = await readFile(path.join(dir, "arr.json"), "utf8");
+		expect(JSON.parse(file).tmdb.key).toBe(KEY);
+	});
+
+	it("passes allowed calls on with the key, and keeps the answer for a while", async () => {
+		seen.length = 0;
+		const first = await call("GET", "/tmdb/trending/movie/week?language=en-US");
+		expect(first.status).toBe(200);
+		expect(seen[0].path).toBe("/3/trending/movie/week");
+		expect(seen[0].query.includes(`api_key=${KEY}`)).toBe(true);
+		await call("GET", "/tmdb/trending/movie/week?language=en-US");
+		expect(seen).toHaveLength(1);
+	});
+
+	it("ignores a key the browser tries to supply", async () => {
+		seen.length = 0;
+		await call("GET", "/tmdb/search/multi?query=a&api_key=evil12345678");
+		expect(seen[0].query.includes("evil")).toBe(false);
+	});
+
+	it("refuses anything else", async () => {
+		expect((await call("GET", "/tmdb/account")).status).toBe(404);
+		expect((await call("GET", "/tmdb/movie/../account")).status).toBe(404);
+		expect((await call("POST", "/tmdb/movie/1")).status).toBe(405);
+	});
+
+	it("uses a read access token as a header", async () => {
+		await call("PUT", "/arr/tmdb", { key: TOKEN });
+		seen.length = 0;
+		await call("GET", "/tmdb/configuration");
+		expect(seen[0].auth).toBe(`Bearer ${TOKEN}`);
+		expect(seen[0].query.includes("api_key")).toBe(false);
+	});
+
+	it("disconnects", async () => {
+		expect((await call("DELETE", "/arr/tmdb")).json).toEqual({
+			configured: false,
+		});
+		expect((await call("GET", "/tmdb/configuration")).status).toBe(404);
+	});
+});

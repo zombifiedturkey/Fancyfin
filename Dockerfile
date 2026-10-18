@@ -13,12 +13,11 @@ RUN pnpm build
 FROM nginx:stable-alpine
 RUN apk add --no-cache nodejs
 # At start-up, docker/10-fancyfin-proxy.sh turns the optional JELLYFIN_URL into the /api proxy config
-# (without it the app asks for the Jellyfin address in the browser) and the optional TMDB_API_KEY
-# into the /tmdb proxy config. docker/20-fancyfin-settings-service.sh starts the small Node service
-# (server/arr-server.mjs) that keeps the Radarr/Sonarr connection saved from Settings.
+# (without it the app asks for the Jellyfin address in the browser). docker/20-fancyfin-settings-service.sh
+# starts the small Node service (server/arr-server.mjs) that keeps the TMDB, Radarr and Sonarr
+# connections saved from Settings, and passes the TMDB calls on.
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY nginx/proxy.conf.template /etc/fancyfin/proxy.conf.template
-COPY nginx/tmdb.conf.template /etc/fancyfin/tmdb.conf.template
 COPY docker/10-fancyfin-proxy.sh /docker-entrypoint.d/10-fancyfin-proxy.sh
 COPY docker/20-fancyfin-settings-service.sh /docker-entrypoint.d/20-fancyfin-settings-service.sh
 COPY server/arr-server.mjs /opt/fancyfin/arr-server.mjs
@@ -26,7 +25,6 @@ RUN chmod +x /docker-entrypoint.d/10-fancyfin-proxy.sh /docker-entrypoint.d/20-f
 COPY --from=build /app/dist /usr/share/nginx/html
 
 ENV JELLYFIN_URL=""
-ENV TMDB_API_KEY=""
 ENV CONFIG_DIR=/config
 VOLUME /config
 EXPOSE 80

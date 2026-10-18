@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { loadRuntimeConfig } from "./runtime-config";
 
 export type TmdbKind = "movie" | "tv";
@@ -224,4 +224,44 @@ export function useRuntimeConfig() {
 /** True when the server has a TMDB key set up. */
 export function useTmdbEnabled(): boolean {
 	return useRuntimeConfig().data?.tmdb ?? false;
+}
+
+/** The words the settings service gave for a refusal, or a plain fallback. */
+async function settingsFailure(response: Response): Promise<Error> {
+	try {
+		const data: unknown = await response.json();
+		const message = (data as { message?: unknown } | null)?.message;
+		if (typeof message === "string" && message) return new Error(message);
+	} catch {
+		// Not JSON.
+	}
+	return new Error(`Fancyfin couldn't save that (error ${response.status}).`);
+}
+
+/** Save a TMDB API key (or read access token) on the server. It checks with TMDB first. */
+export function useConnectTmdb() {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: async (key: string) => {
+			const response = await fetch("/arr/tmdb", {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ key }),
+			});
+			if (!response.ok) throw await settingsFailure(response);
+		},
+		onSuccess: () => queryClient.invalidateQueries(),
+	});
+}
+
+/** Forget the saved TMDB key. */
+export function useDisconnectTmdb() {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: async () => {
+			const response = await fetch("/arr/tmdb", { method: "DELETE" });
+			if (!response.ok) throw await settingsFailure(response);
+		},
+		onSuccess: () => queryClient.invalidateQueries(),
+	});
 }

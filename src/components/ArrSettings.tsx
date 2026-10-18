@@ -12,6 +12,11 @@ import {
 	useConnectArr,
 	useDisconnectArr,
 } from "../lib/arr-queries";
+import {
+	useConnectTmdb,
+	useDisconnectTmdb,
+	useTmdbEnabled,
+} from "../lib/tmdb";
 import { CheckField } from "./controls";
 
 const pill =
@@ -263,5 +268,137 @@ export function ArrSettings() {
 			<ArrCard app="radarr" connection={status.data.apps.radarr} />
 			<ArrCard app="sonarr" connection={status.data.apps.sonarr} />
 		</>
+	);
+}
+
+/** Connect TMDB, which powers the popular banner, genre charts and the "Not in your library" results. */
+export function TmdbSettings() {
+	const connected = useTmdbEnabled();
+	const connect = useConnectTmdb();
+	const disconnect = useDisconnectTmdb();
+
+	const [editing, setEditing] = useState(false);
+	const [key, setKey] = useState("");
+	const [confirming, setConfirming] = useState(false);
+
+	const save = (event: FormEvent) => {
+		event.preventDefault();
+		connect.mutate(key.trim(), {
+			onSuccess: () => {
+				setEditing(false);
+				setKey("");
+			},
+		});
+	};
+
+	return (
+		<div className="glass rounded-card p-4">
+			<div className="flex flex-wrap items-center gap-4">
+				<span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-emerald-400 text-emerald-950">
+					<svg
+						aria-hidden
+						viewBox="0 0 24 24"
+						className="size-6"
+						fill="none"
+						stroke="currentColor"
+						strokeWidth="2"
+						strokeLinecap="round"
+						strokeLinejoin="round"
+					>
+						<circle cx="12" cy="12" r="9" />
+						<path d="M12 7l1.8 3.7 4 .6-2.9 2.8.7 4-3.6-1.9-3.6 1.9.7-4-2.9-2.8 4-.6z" />
+					</svg>
+				</span>
+				<div className="min-w-0 flex-1 basis-56">
+					<p className="text-base font-semibold">TMDB</p>
+					<p className="text-sm text-ink-muted">
+						{connected
+							? "Connected. Popular titles and genre charts are on."
+							: "Not connected. The banner shows recently added titles."}
+					</p>
+				</div>
+				<div className="flex flex-wrap gap-2">
+					<button
+						type="button"
+						onClick={() => {
+							connect.reset();
+							setKey("");
+							setEditing(true);
+						}}
+						className={pill}
+					>
+						{connected ? "Change key" : "Connect"}
+					</button>
+					{connected && (
+						<button
+							type="button"
+							disabled={disconnect.isPending}
+							onClick={() => {
+								if (!confirming) {
+									setConfirming(true);
+									window.setTimeout(() => setConfirming(false), 4000);
+									return;
+								}
+								setConfirming(false);
+								setEditing(false);
+								disconnect.mutate();
+							}}
+							className={pill}
+						>
+							{confirming ? "Click again to disconnect" : "Disconnect"}
+						</button>
+					)}
+				</div>
+			</div>
+
+			{disconnect.error && (
+				<p role="alert" className="mt-3 text-sm text-danger">
+					{describeArrError(disconnect.error)}
+				</p>
+			)}
+
+			{editing && (
+				<form onSubmit={save} className="mt-5 space-y-4">
+					<label className="block">
+						<span className={labelClass}>API key</span>
+						<input
+							type="password"
+							value={key}
+							onChange={(event) => setKey(event.target.value)}
+							placeholder="API key or read access token"
+							autoComplete="off"
+							spellCheck={false}
+							className={field}
+						/>
+					</label>
+					<p className="text-xs text-ink-faint">
+						Free from themoviedb.org: your account, Settings, API. Saved on your
+						Fancyfin server and never sent back to the browser. Fancyfin checks
+						it with TMDB before saving.
+					</p>
+					{connect.error && (
+						<p role="alert" className="text-sm text-danger">
+							{describeArrError(connect.error)}
+						</p>
+					)}
+					<div className="flex flex-wrap gap-2">
+						<button
+							type="submit"
+							disabled={connect.isPending || !key.trim()}
+							className="cursor-pointer rounded-pill bg-ink px-5 py-2 text-sm font-semibold text-canvas transition-opacity hover:opacity-90 disabled:cursor-default disabled:opacity-40"
+						>
+							{connect.isPending ? "Checking…" : "Save"}
+						</button>
+						<button
+							type="button"
+							onClick={() => setEditing(false)}
+							className={pill}
+						>
+							Cancel
+						</button>
+					</div>
+				</form>
+			)}
+		</div>
 	);
 }
