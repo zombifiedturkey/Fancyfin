@@ -9,6 +9,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/zombifiedturkey/Fancyfin/issues</Support>
   <Project>https://github.com/zombifiedturkey/Fancyfin</Project>
+  <Icon>https://raw.githubusercontent.com/zombifiedturkey/Fancyfin/main/public/icon-512.png</Icon>
   <Overview>A modern, cinematic web client for Jellyfin. Point it at your existing Jellyfin server; the Jellyfin server itself is not changed. The :edge tag follows the latest development build.</Overview>
   <Category>MediaApp:Video MediaServer:Video</Category>
   <WebUI>http://[IP]:[PORT:8080]/</WebUI>

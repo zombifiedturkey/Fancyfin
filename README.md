@@ -1,5 +1,7 @@
 # Fancyfin
 
+<p align="left"><img src="public/icon-192.png" alt="Fancyfin" width="96" height="96" /></p>
+
 A modern, cinematic web client for Jellyfin. Beautiful browsing, smooth playback, and styled subtitles, built on the public API.
 
 Fancyfin talks only to the public Jellyfin API, so your server stays stock and updates never break it. See [PLAN.md](PLAN.md) for goals, stack and milestones.

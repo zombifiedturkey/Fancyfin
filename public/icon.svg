@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1b2133"/>
+      <stop offset="1" stop-color="#07080b"/>
+    </linearGradient>
+    <linearGradient id="fin" x1="0.15" y1="1" x2="0.85" y2="0">
+      <stop offset="0" stop-color="#6ea8ff"/>
+      <stop offset="0.55" stop-color="#8fbaff"/>
+      <stop offset="1" stop-color="#b9a4ff"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.62" cy="0.38" r="0.6">
+      <stop offset="0" stop-color="#6ea8ff" stop-opacity="0.38"/>
+      <stop offset="1" stop-color="#6ea8ff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="112" fill="url(#glow)"/>
+  <!-- the fin: a sweeping dorsal fin with a concave back edge -->
+  <path d="M118 372C140 252 226 136 344 84C334 168 352 262 404 372Z" fill="url(#fin)"/>
+  <path d="M118 372C140 252 226 136 344 84C334 168 352 262 404 372Z" fill="url(#sheen)"/>
+  <!-- play triangle cut out of the fin -->
+  <path d="M232 238L232 330L312 284Z" fill="#0b0d14" stroke="#0b0d14" stroke-width="22" stroke-linejoin="round"/>
+  <!-- water line -->
+  <path d="M86 404C150 388 214 420 278 404C342 388 406 420 426 404" fill="none" stroke="#8fbaff" stroke-opacity="0.55" stroke-width="12" stroke-linecap="round"/>
+  <path d="M130 438C186 426 240 450 296 438C340 429 372 444 384 438" fill="none" stroke="#8fbaff" stroke-opacity="0.28" stroke-width="10" stroke-linecap="round"/>
+</svg>
