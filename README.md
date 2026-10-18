@@ -131,3 +131,9 @@ The Android TV app is released separately with `tv-v*` tags.
 ## License
 
 [MIT](LICENSE)
+
+## Credits and disclaimer
+
+Fancyfin is an independent project. It is not affiliated with or endorsed by the Jellyfin project. Jellyfin is a trademark of its owners. Radarr and Sonarr are separate projects that Fancyfin connects to through their public APIs.
+
+This product uses the TMDB API but is not endorsed or certified by TMDB. Popular titles, release dates, genres and details for titles you don't own come from [The Movie Database](https://www.themoviedb.org/).

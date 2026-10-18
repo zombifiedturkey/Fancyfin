@@ -301,6 +301,12 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 					Reset to defaults
 				</button>
 			</div>
+
+			<p className="mt-6 text-left text-xs leading-relaxed text-ink-muted">
+				This product uses the TMDB API but is not endorsed or certified by TMDB.
+				Fancyfin is an independent project and is not affiliated with or
+				endorsed by the Jellyfin project.
+			</p>
 		</Modal>
 	);
 }

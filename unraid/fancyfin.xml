@@ -22,7 +22,9 @@
   <License>MIT</License>
   <Overview>A modern, cinematic web client for Jellyfin. Browse and watch your library in a polished glass-style interface with a featured banner of what is popular right now, subtitles and audio track choice, and one-click adding of missing titles to Radarr and Sonarr. Point it at your existing Jellyfin server; the Jellyfin server itself is not changed.&#13;
 &#13;
-After installing, open Fancyfin and sign in with your Jellyfin account. In Fancyfin's Settings you can connect TMDB (popular titles), Radarr and Sonarr. Their keys are saved in the Config folder and never reach the browser.</Overview>
+After installing, open Fancyfin and sign in with your Jellyfin account. In Fancyfin's Settings you can connect TMDB (popular titles), Radarr and Sonarr. Their keys are saved in the Config folder and never reach the browser.&#13;
+&#13;
+Fancyfin is an independent project and is not affiliated with or endorsed by the Jellyfin project. This product uses the TMDB API but is not endorsed or certified by TMDB.</Overview>
   <Requires>A running Jellyfin server. Optional: a free TMDB API key, Radarr and Sonarr.</Requires>
   <Category>MediaApp:Video</Category>
   <ExtraSearchTerms>jellyfin client frontend ui web radarr sonarr tmdb</ExtraSearchTerms>
