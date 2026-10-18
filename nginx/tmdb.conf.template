@@ -1,8 +1,8 @@
 # TMDB, through this server so the API key never reaches the browser. Read-only, and only the
-# charts the app uses. Filled in at container start by docker/10-fancyfin-proxy.sh.
+# charts, searches and lookups the app uses. Filled in at container start by docker/10-fancyfin-proxy.sh.
 location /tmdb/ {
     limit_except GET { deny all; }
-    if ($uri !~ "^/tmdb/(trending|movie|tv|configuration)(/|$)") { return 404; }
+    if ($uri !~ "^/tmdb/(trending|search|movie|tv|configuration)(/|$)") { return 404; }
 
     # A variable host means nginx looks it up when asked, not at start-up, so a DNS hiccup
     # can't stop the container from booting.

@@ -3,8 +3,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { hueFor } from "../lib/hue";
 import { posterImage } from "../lib/images";
+import { useMissingResults } from "../lib/missing-queries";
 import { usePeek } from "../lib/peek";
 import { useSearchResults } from "../lib/queries";
+import { type TmdbTitle, tmdbImage, tmdbPage } from "../lib/tmdb";
+import { AddToArrButton } from "./AddToArrButton";
 import { FadeImage } from "./FadeImage";
 
 const MAX_PER_GROUP = 5;
@@ -65,6 +68,46 @@ function Row({
 					</span>
 				</span>
 			</button>
+		</li>
+	);
+}
+
+/** A title from TMDB that the library doesn't have, with an Add button for Radarr or Sonarr. */
+function MissingRow({ title }: { title: TmdbTitle }) {
+	const hue = hueFor(title.title);
+	return (
+		<li className="flex items-center gap-3 rounded-xl p-2">
+			<a
+				href={tmdbPage(title)}
+				target="_blank"
+				rel="noopener noreferrer"
+				className="flex min-w-0 flex-1 items-center gap-3 text-left"
+			>
+				<span
+					className="relative aspect-[2/3] w-10 shrink-0 overflow-hidden rounded-md border border-glass-border"
+					style={{
+						backgroundImage: `linear-gradient(145deg, hsl(${hue} 45% 28%), hsl(${(hue + 50) % 360} 50% 14%))`,
+					}}
+				>
+					{title.poster && (
+						<FadeImage
+							key={title.poster}
+							src={tmdbImage(title.poster, "w342")}
+							className="absolute inset-0 size-full object-cover"
+						/>
+					)}
+				</span>
+				<span className="min-w-0">
+					<span className="block truncate text-sm font-medium">
+						{title.title}
+					</span>
+					<span className="block truncate text-xs text-ink-muted">
+						{title.kind === "tv" ? "TV show" : "Movie"}
+						{title.year ? ` · ${title.year}` : ""}
+					</span>
+				</span>
+			</a>
+			<AddToArrButton title={title} variant="row" />
 		</li>
 	);
 }
@@ -137,6 +180,8 @@ export function SearchBox({
 				panelRef.current?.contains(target)
 			)
 				return;
+			// The Add dialog opens on top of the page; clicking in it must not close the search under it.
+			if ((target as Element).closest?.('[role="dialog"]')) return;
 			setOpen(false);
 		};
 		document.addEventListener("mousedown", onDown);
@@ -144,6 +189,8 @@ export function SearchBox({
 	}, [open, setOpen]);
 
 	const results = useSearchResults(term);
+	const missingResults = useMissingResults(term);
+	const missing = missingResults.data ?? [];
 	const showPanel = open && term.trim().length > 0;
 	const movies = (results.data?.movies ?? []).slice(0, MAX_PER_GROUP);
 	const shows = (results.data?.shows ?? []).slice(0, MAX_PER_GROUP);
@@ -223,7 +270,7 @@ export function SearchBox({
 					<div
 						ref={panelRef}
 						id="search-results"
-						className="fixed right-[var(--page-gutter)] top-[76px] z-[60] max-h-[min(34rem,calc(100dvh-6.5rem))] w-[clamp(19rem,26vw,28rem)] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-card border border-white/15 bg-[rgb(16_18_28/0.88)] p-2 shadow-[0_24px_60px_-12px_rgb(0_0_0/0.7)] backdrop-blur-[44px] backdrop-saturate-[1.6]"
+						className="glass fixed right-[var(--page-gutter)] top-[76px] z-[60] max-h-[min(34rem,calc(100dvh-6.5rem))] w-[clamp(19rem,26vw,28rem)] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-card p-2 shadow-card"
 					>
 						{results.isError ? (
 							<p className="p-3 text-sm text-ink-muted">
@@ -235,7 +282,7 @@ export function SearchBox({
 									<li key={i} className="shimmer h-16 rounded-xl" />
 								))}
 							</ul>
-						) : flat.length === 0 ? (
+						) : flat.length === 0 && missing.length === 0 ? (
 							<p className="p-3 text-sm text-ink-muted">
 								Nothing found for “{term.trim()}”.
 							</p>
@@ -274,6 +321,19 @@ export function SearchBox({
 													active={activeIndex === movies.length + i}
 													onPick={() => pick(item)}
 													onHover={() => setActiveIndex(movies.length + i)}
+												/>
+											))}
+										</ul>
+									</section>
+								)}
+								{missing.length > 0 && (
+									<section>
+										<h2 className={heading}>Not in your library</h2>
+										<ul>
+											{missing.map((title) => (
+												<MissingRow
+													key={`${title.kind}:${title.id}`}
+													title={title}
 												/>
 											))}
 										</ul>

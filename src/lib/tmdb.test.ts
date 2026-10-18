@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { parseTrending, parseTvdbId, tmdbImage, tmdbPage } from "./tmdb";
+import {
+	parseSearch,
+	parseTrending,
+	parseTvdbId,
+	tmdbImage,
+	tmdbPage,
+} from "./tmdb";
 
 describe("parseTrending", () => {
 	const movie = {
@@ -87,5 +93,37 @@ describe("parseTvdbId", () => {
 		expect(parseTvdbId({ tvdb_id: 393189 })).toBe(393189);
 		expect(parseTvdbId({ tvdb_id: null })).toBeUndefined();
 		expect(parseTvdbId(null)).toBeUndefined();
+	});
+});
+
+describe("parseSearch", () => {
+	it("keeps movies and shows, drops people, and doesn't need a backdrop", () => {
+		const titles = parseSearch({
+			results: [
+				{
+					id: 1,
+					media_type: "movie",
+					title: "Dune",
+					release_date: "2021-10-01",
+					poster_path: "/d.jpg",
+				},
+				{
+					id: 2,
+					media_type: "tv",
+					name: "Dune: Prophecy",
+					first_air_date: "2024-11-17",
+				},
+				{ id: 3, media_type: "person", name: "Dune Person" },
+				{ id: 4, media_type: "movie", title: "" },
+				{ id: "5", media_type: "movie", title: "x" },
+			],
+		});
+		expect(titles.map((t) => [t.kind, t.id, t.title, t.year])).toEqual([
+			["movie", 1, "Dune", 2021],
+			["tv", 2, "Dune: Prophecy", 2024],
+		]);
+		expect(titles[0]?.poster).toBe("/d.jpg");
+		expect(titles[1]?.poster).toBeUndefined();
+		expect(parseSearch(null)).toEqual([]);
 	});
 });

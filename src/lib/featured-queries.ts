@@ -96,7 +96,7 @@ function loadTrending(
 }
 
 /** What the library has, as a TMDB id index per kind. */
-async function loadIndexes(
+export async function loadIndexes(
 	queryClient: QueryClient,
 	userId: string,
 	kinds: TmdbKind[],

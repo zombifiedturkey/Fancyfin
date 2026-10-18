@@ -9,7 +9,7 @@ export type TmdbTitle = {
 	kind: TmdbKind;
 	title: string;
 	overview: string;
-	/** TMDB image path, like "/abc.jpg". */
+	/** TMDB image path, like "/abc.jpg". Empty for search results that have none. */
 	backdrop: string;
 	/** TMDB image path of the poster, when there is one. */
 	poster?: string;
@@ -57,6 +57,41 @@ export function parseTrending(kind: TmdbKind, json: unknown): TmdbTitle[] {
 	return titles;
 }
 
+/** Read TMDB's multi-search. Movies and shows only (not people); a picture is not required here. */
+export function parseSearch(json: unknown): TmdbTitle[] {
+	const results = (json as { results?: unknown } | null)?.results;
+	if (!Array.isArray(results)) return [];
+
+	const titles: TmdbTitle[] = [];
+	for (const raw of results) {
+		if (typeof raw !== "object" || raw === null) continue;
+		const row = raw as Record<string, unknown>;
+		const kind: TmdbKind | undefined =
+			row.media_type === "movie"
+				? "movie"
+				: row.media_type === "tv"
+					? "tv"
+					: undefined;
+		if (!kind || typeof row.id !== "number") continue;
+		const title = text(kind === "movie" ? row.title : row.name);
+		if (!title) continue;
+
+		const date = text(kind === "movie" ? row.release_date : row.first_air_date);
+		const year = Number.parseInt(date.slice(0, 4), 10);
+		titles.push({
+			id: row.id,
+			kind,
+			title,
+			overview: text(row.overview),
+			backdrop: text(row.backdrop_path),
+			poster: text(row.poster_path) || undefined,
+			year: Number.isNaN(year) ? undefined : year,
+			popularity: typeof row.popularity === "number" ? row.popularity : 0,
+		});
+	}
+	return titles;
+}
+
 /** TMDB's image CDN. These need no key, so the browser loads them directly. */
 export function tmdbImage(
 	path: string,
@@ -67,6 +102,19 @@ export function tmdbImage(
 
 export function tmdbPage(title: TmdbTitle): string {
 	return `https://www.themoviedb.org/${title.kind}/${title.id}`;
+}
+
+/** Search TMDB for movies and shows by name, through the server's /tmdb proxy. */
+export async function fetchSearch(
+	term: string,
+	signal?: AbortSignal,
+): Promise<TmdbTitle[]> {
+	const response = await fetch(
+		`/tmdb/search/multi?query=${encodeURIComponent(term)}&include_adult=false&language=en-US`,
+		{ signal },
+	);
+	if (!response.ok) throw new Error(`TMDB ${response.status}`);
+	return parseSearch(await response.json());
 }
 
 /** The TVDB id of a TMDB show (Sonarr finds shows by it), from /tv/{id}/external_ids. */

@@ -5,10 +5,12 @@ import {
 	buildSeriesBody,
 	type Candidate,
 	type Choices,
+	connectionDetail,
 	folderLabel,
 	formatBytes,
 	mergeCandidates,
 	metaLine,
+	parseArrStatus,
 	parseCandidates,
 	parseFolders,
 	parseProfiles,
@@ -329,5 +331,56 @@ describe("arrErrorMessage", () => {
 		expect(arrErrorMessage("radarr", 500, "<html>")).toBe(
 			"Radarr didn't accept that (error 500).",
 		);
+	});
+});
+
+describe("connection status", () => {
+	it("reads the server's answer", () => {
+		const status = parseArrStatus({
+			persistent: true,
+			apps: {
+				radarr: {
+					configured: true,
+					url: "http://10.0.0.138:7878",
+					version: "5.14.0.9383",
+					count: 1748,
+				},
+				sonarr: { configured: false },
+			},
+		});
+		expect(status?.persistent).toBe(true);
+		expect(status?.apps.radarr).toMatchObject({
+			configured: true,
+			url: "http://10.0.0.138:7878",
+			count: 1748,
+		});
+		expect(status?.apps.sonarr).toEqual({ configured: false });
+	});
+
+	it("rejects other shapes", () => {
+		expect(parseArrStatus(null)).toBeUndefined();
+		expect(parseArrStatus({ apps: 3 })).toBeUndefined();
+		expect(parseArrStatus({ message: "nope" })).toBeUndefined();
+	});
+
+	it("describes a connection", () => {
+		expect(
+			connectionDetail("radarr", {
+				configured: true,
+				version: "5.14.0.9383",
+				count: 1748,
+			}),
+		).toBe("v5.14.0.9383 · 1748 movies");
+		expect(connectionDetail("radarr", { configured: true, count: 1 })).toBe(
+			"1 movie",
+		);
+		expect(
+			connectionDetail("sonarr", {
+				configured: true,
+				version: "4.0.10.2544",
+				count: 136,
+			}),
+		).toBe("v4.0.10.2544 · 136 series");
+		expect(connectionDetail("sonarr", { configured: true })).toBe("");
 	});
 });

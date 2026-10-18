@@ -8,6 +8,7 @@
 	},
 	"scripts": {
 		"dev": "vite",
+		"dev:server": "node --env-file-if-exists=.env.local server/arr-server.mjs --config-dir=.config",
 		"build": "tsc --noEmit && vite build",
 		"preview": "vite preview",
 		"typecheck": "tsc --noEmit",

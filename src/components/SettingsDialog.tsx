@@ -1,7 +1,5 @@
 import type { ReactNode } from "react";
-import { ARR_LABEL, type ArrApp } from "../lib/arr";
-import { saveArrPrefs, useArrPrefs } from "../lib/arr-prefs";
-import { useArrAvailability } from "../lib/arr-queries";
+import { useIsAdmin } from "../lib/admin-queries";
 import { resetSettings, updateSettings, useSettings } from "../lib/settings";
 import {
 	ACCENTS,
@@ -11,6 +9,7 @@ import {
 	moveRow,
 } from "../lib/settings-model";
 import { useTmdbEnabled } from "../lib/tmdb";
+import { ArrSettings } from "./ArrSettings";
 import { Segmented, Switch } from "./controls";
 import { Modal } from "./Modal";
 
@@ -50,9 +49,7 @@ const smallButton =
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
 	const settings = useSettings();
 	const tmdb = useTmdbEnabled();
-	const arr = useArrAvailability();
-	const arrPrefs = useArrPrefs();
-	const arrApps = (["radarr", "sonarr"] as const).filter((app) => arr[app]);
+	const isAdmin = useIsAdmin().data === true;
 	const customChosen = settings.accent === "custom";
 
 	return (
@@ -267,24 +264,9 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 				</Setting>
 			</Section>
 
-			{arrApps.length > 0 && (
+			{isAdmin && (
 				<Section title="Radarr and Sonarr">
-					{arrApps.map((app: ArrApp) => (
-						<Setting
-							key={app}
-							label={ARR_LABEL[app]}
-							hint="Off means titles are added straight away, using the settings you chose last time."
-						>
-							<Switch
-								checked={!arrPrefs[app].skip}
-								onChange={(ask) =>
-									saveArrPrefs(app, { ...arrPrefs[app], skip: !ask })
-								}
-							>
-								Ask me where to put it before adding to {ARR_LABEL[app]}
-							</Switch>
-						</Setting>
-					))}
+					<ArrSettings />
 				</Section>
 			)}
 

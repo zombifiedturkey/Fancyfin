@@ -19,6 +19,23 @@ export const ARR_KIND: Record<ArrApp, "movie" | "series"> = {
 	sonarr: "series",
 };
 
+/** What the Fancyfin server knows about one app's connection. It never includes the key. */
+export type ArrConnection = {
+	configured: boolean;
+	url?: string;
+	version?: string;
+	/** Movies in Radarr, or series in Sonarr. */
+	count?: number;
+	/** Why a saved connection isn't working, in words for the person. */
+	error?: string;
+};
+
+export type ArrStatus = {
+	/** False when the server has no mounted /config folder, so the connection is forgotten on update. */
+	persistent: boolean;
+	apps: Record<ArrApp, ArrConnection>;
+};
+
 export type QualityProfile = { id: number; name: string };
 export type RootFolder = { path: string; freeSpace?: number };
 export type ArrOptions = { profiles: QualityProfile[]; folders: RootFolder[] };
@@ -225,6 +242,44 @@ export function metaLine(candidate: Candidate): string {
 		.join(" · ");
 }
 
+function parseConnection(raw: unknown): ArrConnection {
+	if (!isRecord(raw) || raw.configured !== true) return { configured: false };
+	return {
+		configured: true,
+		url: text(raw.url),
+		version: text(raw.version),
+		count: typeof raw.count === "number" ? raw.count : undefined,
+		error: text(raw.error),
+	};
+}
+
+/** Read /arr/status. Undefined when the answer isn't the expected shape. */
+export function parseArrStatus(json: unknown): ArrStatus | undefined {
+	if (!isRecord(json) || !isRecord(json.apps)) return undefined;
+	return {
+		persistent: json.persistent === true,
+		apps: {
+			radarr: parseConnection(json.apps.radarr),
+			sonarr: parseConnection(json.apps.sonarr),
+		},
+	};
+}
+
+/** "v5.14.0.9383 · 1748 movies" */
+export function connectionDetail(
+	app: ArrApp,
+	connection: ArrConnection,
+): string {
+	const noun = app === "radarr" ? "movie" : "series";
+	const count =
+		connection.count === undefined
+			? undefined
+			: `${connection.count} ${noun}${connection.count === 1 || noun === "series" ? "" : "s"}`;
+	return [connection.version ? `v${connection.version}` : undefined, count]
+		.filter(Boolean)
+		.join(" · ");
+}
+
 /** Read the quality profiles. */
 export function parseProfiles(json: unknown): QualityProfile[] {
 	if (!Array.isArray(json)) return [];
@@ -391,7 +446,7 @@ export function arrErrorMessage(
 	}
 	// 0 means the request never got an answer at all.
 	if ([0, 404, 502, 503, 504].includes(status)) {
-		return `Fancyfin couldn't reach ${label}. Check its address on the Fancyfin container.`;
+		return `Fancyfin couldn't reach ${label}. Check its address in Settings.`;
 	}
 	const reason = reasonFrom(body);
 	if (reason) return reason;

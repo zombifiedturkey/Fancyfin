@@ -14,17 +14,19 @@ import { AddToArrDialog } from "./AddToArrDialog";
 
 const styles = {
 	hero: "flex cursor-pointer items-center gap-2 rounded-pill bg-ink px-6 py-3 text-sm font-semibold text-canvas transition-opacity hover:opacity-90 disabled:cursor-default disabled:opacity-60",
+	row: "glass flex shrink-0 cursor-pointer items-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-glass-strong disabled:cursor-default disabled:opacity-70",
 	card: "glass flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-glass-strong disabled:cursor-default disabled:opacity-70",
 } as const;
 
 const addedStyles = {
 	hero: "glass flex items-center gap-2 rounded-pill px-6 py-3 text-sm font-semibold text-ink",
+	row: "glass flex shrink-0 items-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-semibold text-success",
 	card: "glass flex w-full items-center justify-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-semibold text-success",
 } as const;
 
 type AddToArrButtonProps = {
 	title: TmdbTitle;
-	variant: "hero" | "card";
+	variant: "hero" | "card" | "row";
 	/** Told when the Add dialog opens or closes, so a carousel can stop moving while it's open. */
 	onDialogChange?: (open: boolean) => void;
 };
@@ -99,7 +101,7 @@ function AddButton({ title, variant, onDialogChange }: AddToArrButtonProps) {
 				className={styles[variant]}
 			>
 				<Icon kind="plus" />
-				{busy ? "Adding…" : `Add to ${label}`}
+				{busy ? "Adding…" : variant === "row" ? "Add" : `Add to ${label}`}
 			</button>
 			{open && (
 				<AddToArrDialog

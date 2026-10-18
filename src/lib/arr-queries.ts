@@ -11,11 +11,13 @@ import {
 	ARR_LABEL,
 	type ArrApp,
 	type ArrOptions,
+	type ArrStatus,
 	arrErrorMessage,
 	buildAddBody,
 	type Candidate,
 	type Choices,
 	mergeCandidates,
+	parseArrStatus,
 	parseCandidates,
 	parseFolders,
 	parseProfiles,
@@ -48,18 +50,27 @@ export class ArrError extends Error {
 }
 
 /**
- * A call to Radarr or Sonarr through the Fancyfin server, which adds the API key and only lets
- * Jellyfin administrators through. The Jellyfin token is how the server knows who is asking.
+ * A call to the Fancyfin server's settings service (/arr), which keeps the Radarr and Sonarr keys
+ * and only lets Jellyfin administrators through. The Jellyfin token is how it knows who is asking.
+ * `app` is only used to word errors; leave it out for calls that aren't about one app.
  */
-async function arrRequest(
-	app: ArrApp,
+async function arrApi(
+	app: ArrApp | undefined,
 	path: string,
-	init: { method?: "GET" | "POST"; body?: unknown; signal?: AbortSignal } = {},
+	init: {
+		method?: "GET" | "POST" | "PUT" | "DELETE";
+		body?: unknown;
+		signal?: AbortSignal;
+	} = {},
 ): Promise<unknown> {
 	const hasBody = init.body !== undefined;
+	const fail = (status: number, body: string) =>
+		app
+			? new ArrError(app, status, body)
+			: new Error(`Fancyfin settings service answered ${status}.`);
 	let response: Response;
 	try {
-		response = await fetch(`/${app}/api/v3/${path}`, {
+		response = await fetch(`/arr/${path}`, {
 			method: init.method ?? "GET",
 			signal: init.signal,
 			headers: {
@@ -73,27 +84,75 @@ async function arrRequest(
 		if (error instanceof DOMException && error.name === "AbortError") {
 			throw error;
 		}
-		throw new ArrError(app, 0, "");
+		throw fail(0, "");
 	}
-	if (!response.ok) {
-		throw new ArrError(app, response.status, await response.text());
-	}
+	if (!response.ok) throw fail(response.status, await response.text());
 	return response.json();
 }
 
-/** Which of Radarr and Sonarr this person can use: set up on the server, and they're an administrator. */
-export function useArrAvailability(): Record<ArrApp, boolean> {
+/** A call to Radarr's or Sonarr's own API, through the settings service. */
+function arrRequest(
+	app: ArrApp,
+	path: string,
+	init: { method?: "GET" | "POST"; body?: unknown; signal?: AbortSignal } = {},
+): Promise<unknown> {
+	return arrApi(app, `${app}/api/v3/${path}`, init);
+}
+
+/**
+ * What is connected, and whether it is working. Only administrators can ask; for anyone else, or on
+ * a server without the settings service (no JELLYFIN_URL), this stays empty and Radarr and Sonarr
+ * are simply not offered.
+ */
+export function useArrStatus() {
 	const config = useRuntimeConfig();
 	const admin = useIsAdmin();
-	const isAdmin = admin.data === true;
+	return useQuery({
+		queryKey: ["arr", "status"],
+		enabled: admin.data === true && config.data?.proxy === true,
+		staleTime: 30_000,
+		retry: false,
+		queryFn: async ({ signal }): Promise<ArrStatus> => {
+			const status = parseArrStatus(
+				await arrApi(undefined, "status", { signal }),
+			);
+			if (!status)
+				throw new Error("Unexpected answer from the settings service.");
+			return status;
+		},
+	});
+}
+
+/** Which of Radarr and Sonarr this person can use: connected in Settings, and they're an administrator. */
+export function useArrAvailability(): Record<ArrApp, boolean> {
+	const status = useArrStatus().data;
 	return {
-		radarr: isAdmin && config.data?.radarr === true,
-		sonarr: isAdmin && config.data?.sonarr === true,
+		radarr: status?.apps.radarr.configured === true,
+		sonarr: status?.apps.sonarr.configured === true,
 	};
 }
 
 export function useArrAvailable(app: ArrApp): boolean {
 	return useArrAvailability()[app];
+}
+
+/** Save an app's address and key on the server. It checks they work first. */
+export function useConnectArr(app: ArrApp) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (input: { url: string; key: string }) =>
+			arrApi(app, app, { method: "PUT", body: input }),
+		onSuccess: () => queryClient.invalidateQueries({ queryKey: ["arr"] }),
+	});
+}
+
+/** Forget an app's address and key. */
+export function useDisconnectArr(app: ArrApp) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: () => arrApi(app, app, { method: "DELETE" }),
+		onSuccess: () => queryClient.invalidateQueries({ queryKey: ["arr"] }),
+	});
 }
 
 /** The quality profiles and root folders (with free space) the app offers. */
