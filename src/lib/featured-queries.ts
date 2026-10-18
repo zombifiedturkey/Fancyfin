@@ -155,8 +155,7 @@ function loadGenrePopular(
 			return queryClient.fetchQuery({
 				queryKey: ["tmdb", "keyword-popular", tmdbKind, keywords.join(",")],
 				staleTime: 30 * 60_000,
-				queryFn: ({ signal: s }) =>
-					fetchPopularIn(tmdbKind, { keywords }, s),
+				queryFn: ({ signal: s }) => fetchPopularIn(tmdbKind, { keywords }, s),
 			});
 		}),
 	);
@@ -237,7 +236,13 @@ export function useFeatured(
 			let popular: PopularMatch[] = [];
 			if (source !== "recent") {
 				try {
-					popular = await fetchPopular(queryClient, userId, kind, genre, signal);
+					popular = await fetchPopular(
+						queryClient,
+						userId,
+						kind,
+						genre,
+						signal,
+					);
 				} catch {
 					// TMDB unreachable or the key was refused: fall back to recently added.
 				}

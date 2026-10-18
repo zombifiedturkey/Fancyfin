@@ -5,6 +5,8 @@ import { createRoot } from "react-dom/client";
 import { AuthProvider } from "./auth/AuthProvider";
 import { MotionRoot } from "./components/MotionRoot";
 import { initSettings } from "./lib/settings";
+import { installSpatialNav } from "./lib/spatial-nav-dom";
+import { isTv } from "./lib/tv";
 import { router } from "./router";
 import "./styles.css";
 
@@ -20,6 +22,12 @@ const queryClient = new QueryClient({
 
 // Before the first render, so the page never flashes the default look.
 initSettings();
+
+// In the Android TV app: the TV layout, and moving around with the remote's arrow keys.
+if (isTv()) {
+	document.documentElement.dataset.tv = "";
+	installSpatialNav();
+}
 
 const container = document.getElementById("root");
 if (!container) throw new Error("Root element #root not found");

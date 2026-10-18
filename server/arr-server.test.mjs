@@ -75,10 +75,18 @@ describe("helpers", () => {
 		expect(allowedCall("sonarr", "POST", "api/v3/series")).toBe(true);
 		expect(allowedCall("sonarr", "GET", "api/v3/series/lookup")).toBe(true);
 		expect(allowedCall("radarr", "GET", "api/v3/movie")).toBe(false);
-		expect(allowedCall("radarr", "GET", "api/v3/movie", "?tmdbId=550")).toBe(true);
-		expect(allowedCall("radarr", "GET", "api/v3/movie", "?tmdbId=abc")).toBe(false);
-		expect(allowedCall("sonarr", "GET", "api/v3/series", "?tvdbId=81189")).toBe(true);
-		expect(allowedCall("sonarr", "GET", "api/v3/series", "?tmdbId=5")).toBe(false);
+		expect(allowedCall("radarr", "GET", "api/v3/movie", "?tmdbId=550")).toBe(
+			true,
+		);
+		expect(allowedCall("radarr", "GET", "api/v3/movie", "?tmdbId=abc")).toBe(
+			false,
+		);
+		expect(allowedCall("sonarr", "GET", "api/v3/series", "?tvdbId=81189")).toBe(
+			true,
+		);
+		expect(allowedCall("sonarr", "GET", "api/v3/series", "?tmdbId=5")).toBe(
+			false,
+		);
 		expect(allowedCall("radarr", "DELETE", "api/v3/movie")).toBe(false);
 		expect(allowedCall("radarr", "GET", "api/v3/system/status")).toBe(false);
 		expect(allowedCall("radarr", "POST", "api/v3/series")).toBe(false);
@@ -311,7 +319,11 @@ describe("TMDB", () => {
 		seen = [];
 		fake = http.createServer((req, res) => {
 			const url = new URL(req.url, "http://x");
-			seen.push({ path: url.pathname, query: url.search, auth: req.headers.authorization });
+			seen.push({
+				path: url.pathname,
+				query: url.search,
+				auth: req.headers.authorization,
+			});
 			const ok =
 				url.searchParams.get("api_key") === KEY ||
 				req.headers.authorization === `Bearer ${TOKEN}`;
@@ -335,13 +347,17 @@ describe("TMDB", () => {
 	});
 
 	it("starts disconnected, and says so to the app", async () => {
-		expect((await call("GET", "/arr/tmdb")).json).toEqual({ configured: false });
+		expect((await call("GET", "/arr/tmdb")).json).toEqual({
+			configured: false,
+		});
 		expect((await call("GET", "/tmdb/trending/movie/week")).status).toBe(404);
 	});
 
 	it("refuses a bad key and saves nothing", async () => {
 		expect((await call("PUT", "/arr/tmdb", { key: "" })).status).toBe(400);
-		expect((await call("PUT", "/arr/tmdb", { key: "no good!" })).status).toBe(400);
+		expect((await call("PUT", "/arr/tmdb", { key: "no good!" })).status).toBe(
+			400,
+		);
 		const wrong = await call("PUT", "/arr/tmdb", { key: "wrongwrong1234" });
 		expect(wrong.status).toBe(400);
 		expect(wrong.json.message).toMatch(/refused/);

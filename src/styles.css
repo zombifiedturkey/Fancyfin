@@ -140,3 +140,15 @@
 		background-position: -200% 0;
 	}
 }
+
+/* The Android TV app (and ?tv=1): bigger everything, a clear focus ring, and no mouse pointer. */
+html[data-tv] {
+	font-size: 112.5%;
+	cursor: none;
+}
+
+html[data-tv] :focus-visible {
+	outline: 3px solid #fff;
+	outline-offset: 4px;
+	box-shadow: 0 0 0 8px rgb(110 168 255 / 0.5);
+}

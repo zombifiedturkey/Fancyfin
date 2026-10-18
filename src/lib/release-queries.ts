@@ -7,7 +7,8 @@ async function fetchRelease(
 	title: TmdbTitle,
 	signal?: AbortSignal,
 ): Promise<ReleaseInfo | null> {
-	const extra = title.kind === "movie" ? "&append_to_response=release_dates" : "";
+	const extra =
+		title.kind === "movie" ? "&append_to_response=release_dates" : "";
 	const response = await fetch(
 		`/tmdb/${title.kind}/${title.id}?language=en-US${extra}`,
 		{ signal },

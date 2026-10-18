@@ -8,9 +8,11 @@ import {
 	moveRow,
 } from "../lib/settings-model";
 import { useTmdbEnabled } from "../lib/tmdb";
+import { getTvBridge } from "../lib/tv";
 import { ArrSettings, TmdbSettings } from "./ArrSettings";
 import { Segmented, Switch } from "./controls";
 import { Modal } from "./Modal";
+import { TvAppSettings } from "./TvAppSettings";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
 	return (
@@ -261,6 +263,12 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 					</ul>
 				</Setting>
 			</Section>
+
+			{getTvBridge() && (
+				<Section title="TV app">
+					<TvAppSettings />
+				</Section>
+			)}
 
 			<Section title="TMDB">
 				<TmdbSettings />

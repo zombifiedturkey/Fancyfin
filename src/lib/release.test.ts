@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { formatReleaseDate, parseMovieRelease, parseTvRelease } from "./release";
+import {
+	formatReleaseDate,
+	parseMovieRelease,
+	parseTvRelease,
+} from "./release";
 
 const now = new Date("2026-10-18T04:00:00Z");
 
@@ -35,13 +39,23 @@ describe("parseMovieRelease", () => {
 	it("says it is out when streaming or disc has happened", () => {
 		expect(
 			parseMovieRelease(
-				movie("Released", { AU: [[3, "2026-05-01"], [4, "2026-07-01"]] }),
+				movie("Released", {
+					AU: [
+						[3, "2026-05-01"],
+						[4, "2026-07-01"],
+					],
+				}),
 				now,
 			),
 		).toEqual({ status: "Released", detail: "Out now on streaming" });
 		expect(
 			parseMovieRelease(
-				movie("Released", { US: [[4, "2026-07-01"], [5, "2026-07-01"]] }),
+				movie("Released", {
+					US: [
+						[4, "2026-07-01"],
+						[5, "2026-07-01"],
+					],
+				}),
 				now,
 			)?.detail,
 		).toBe("Out now on streaming and disc");
@@ -65,7 +79,12 @@ describe("parseMovieRelease", () => {
 		});
 		expect(
 			parseMovieRelease(
-				movie("Released", { AU: [[3, "2026-10-01"], [5, "2026-11-20"]] }),
+				movie("Released", {
+					AU: [
+						[3, "2026-10-01"],
+						[5, "2026-11-20"],
+					],
+				}),
 				now,
 			)?.detail,
 		).toBe("Disc expected 20 Nov 2026");
@@ -74,14 +93,25 @@ describe("parseMovieRelease", () => {
 	it("prefers Australian dates, then US, then anywhere", () => {
 		const info = parseMovieRelease(
 			movie("Released", {
-				US: [[3, "2026-10-01"], [4, "2026-11-01"]],
-				AU: [[3, "2026-10-02"], [4, "2026-12-05"]],
+				US: [
+					[3, "2026-10-01"],
+					[4, "2026-11-01"],
+				],
+				AU: [
+					[3, "2026-10-02"],
+					[4, "2026-12-05"],
+				],
 			}),
 			now,
 		);
 		expect(info?.detail).toBe("Streaming expected 5 Dec 2026");
 		const fallback = parseMovieRelease(
-			movie("Released", { FR: [[3, "2026-10-01"], [4, "2027-01-05"]] }),
+			movie("Released", {
+				FR: [
+					[3, "2026-10-01"],
+					[4, "2027-01-05"],
+				],
+			}),
 			now,
 		);
 		expect(fallback?.detail).toBe("Streaming expected 5 Jan 2027");
@@ -127,7 +157,10 @@ describe("parseMovieRelease", () => {
 	it("handles a streaming-only release that hasn't happened", () => {
 		expect(
 			parseMovieRelease(movie("Planned", { US: [[4, "2026-11-11"]] }), now),
-		).toEqual({ status: "Coming soon", detail: "Streaming expected 11 Nov 2026" });
+		).toEqual({
+			status: "Coming soon",
+			detail: "Streaming expected 11 Nov 2026",
+		});
 	});
 });
 
@@ -142,7 +175,10 @@ describe("parseTvRelease", () => {
 				},
 				now,
 			),
-		).toEqual({ status: "Returning series", detail: "Next episode 2 Nov 2026" });
+		).toEqual({
+			status: "Returning series",
+			detail: "Next episode 2 Nov 2026",
+		});
 		expect(
 			parseTvRelease(
 				{ status: "Returning Series", first_air_date: "2022-01-01" },
@@ -152,7 +188,9 @@ describe("parseTvRelease", () => {
 	});
 
 	it("describes ended, cancelled and not-yet-aired shows", () => {
-		expect(parseTvRelease({ status: "Ended" }, now)).toEqual({ status: "Ended" });
+		expect(parseTvRelease({ status: "Ended" }, now)).toEqual({
+			status: "Ended",
+		});
 		expect(parseTvRelease({ status: "Canceled" }, now)).toEqual({
 			status: "Cancelled",
 		});

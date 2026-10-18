@@ -25,11 +25,7 @@ import {
 	searchTerm,
 } from "./arr";
 import { getArrPrefs } from "./arr-prefs";
-import {
-	fetchTvdbId,
-	type TmdbKind,
-	type TmdbTitle,
-} from "./tmdb";
+import { fetchTvdbId, type TmdbKind, type TmdbTitle } from "./tmdb";
 
 /** Radarr adds movies; Sonarr adds series. */
 export function arrForKind(kind: TmdbKind): ArrApp {

@@ -57,6 +57,10 @@ The featured banner on Home and the Movies and TV Shows pages can show what's po
 
 The key is saved on the server (in the `/config` folder) and the browser never sees it: the browser only talks to `/tmdb` on your Fancyfin address, and the server adds the key. Never commit the key to the repository. Without a key the banner shows recently added titles.
 
+### Android TV app
+
+`android/` holds a small Android TV app (for example for an NVIDIA Shield) that shows Fancyfin full screen from your own server, with a built-in updater so you only sideload it once. Setup, signing key and installing are in [android/README.md](android/README.md). Inside the app, Settings has a **TV app** section.
+
 ### Add to Radarr and Sonarr
 
 Titles you don't have can be sent straight to [Radarr](https://radarr.video/) (movies) or [Sonarr](https://sonarr.tv/) (TV) so they get collected. The Add buttons appear on "Not in your library" banner slides, in the **Discover** row on Home and in the "Not in your library" group in search results (all of which need TMDB, above), but only once the app is connected and working in Settings.

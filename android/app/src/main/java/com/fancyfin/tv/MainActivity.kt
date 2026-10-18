@@ -242,8 +242,15 @@ class MainActivity : Activity() {
         val web = webView
         when {
             customView != null -> hideCustomView()
-            errorView == null && web != null && web.canGoBack() -> web.goBack()
-            else -> super.onBackPressed()
+            errorView != null || web == null -> super.onBackPressed()
+            else -> {
+                // Let the page close a dialog first; otherwise go back, and leave at the start.
+                web.evaluateJavascript("(window.fancyfinBack ? window.fancyfinBack() : false)") { result ->
+                    if (result != "true") {
+                        if (web.canGoBack()) web.goBack() else finish()
+                    }
+                }
+            }
         }
     }
 

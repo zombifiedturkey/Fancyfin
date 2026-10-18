@@ -79,7 +79,9 @@ const ALWAYS_GENRES: Record<LibraryKind, string[]> = {
 /** The server's genres plus the always-offered ones, sorted by name, each once. */
 export function withAlwaysGenres(kind: LibraryKind, names: string[]): string[] {
 	const have = new Set(names.map((name) => name.toLowerCase()));
-	const extra = ALWAYS_GENRES[kind].filter((name) => !have.has(name.toLowerCase()));
+	const extra = ALWAYS_GENRES[kind].filter(
+		(name) => !have.has(name.toLowerCase()),
+	);
 	return [...names, ...extra].sort((a, b) => a.localeCompare(b));
 }
 

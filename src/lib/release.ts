@@ -126,7 +126,9 @@ export function parseMovieRelease(
 				new Set(
 					home.filter((e) => e.time === next.time).map((entry) => entry.type),
 				),
-			).replace(/^./, (c) => c.toUpperCase())} expected ${formatReleaseDate(next.time)}`
+			).replace(/^./, (c) =>
+				c.toUpperCase(),
+			)} expected ${formatReleaseDate(next.time)}`
 		: undefined;
 
 	const cinema =

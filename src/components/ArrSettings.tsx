@@ -12,11 +12,7 @@ import {
 	useConnectArr,
 	useDisconnectArr,
 } from "../lib/arr-queries";
-import {
-	useConnectTmdb,
-	useDisconnectTmdb,
-	useTmdbEnabled,
-} from "../lib/tmdb";
+import { useConnectTmdb, useDisconnectTmdb, useTmdbEnabled } from "../lib/tmdb";
 import { CheckField } from "./controls";
 
 const pill =
