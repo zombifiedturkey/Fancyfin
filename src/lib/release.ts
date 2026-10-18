@@ -193,3 +193,13 @@ export function parseTvRelease(
 				: "Next episode not announced",
 	};
 }
+
+/** The genre names in a TMDB movie or show. */
+export function parseGenreNames(json: unknown): string[] {
+	const genres = (json as { genres?: unknown } | null)?.genres;
+	if (!Array.isArray(genres)) return [];
+	return genres.flatMap((row) => {
+		const name = (row as { name?: unknown } | null)?.name;
+		return typeof name === "string" && name.trim() ? [name.trim()] : [];
+	});
+}

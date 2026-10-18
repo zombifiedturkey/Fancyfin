@@ -16,9 +16,24 @@ export function ReleasePill({ release }: { release: ReleaseInfo }) {
 	);
 }
 
-/** Where a title is in its release, fetched from TMDB. Nothing while loading or if unknown. */
+/** A title's genres, as the line under the year and rating. */
+export function GenreLine({ genres }: { genres: string[] }) {
+	if (genres.length === 0) return null;
+	return (
+		<p className="mt-1 text-sm font-medium text-ink/80">
+			{genres.slice(0, 3).join(", ")}
+		</p>
+	);
+}
+
+/** The genres and release status of a title that isn't in the library, fetched from TMDB. */
 export function ReleaseLine({ title }: { title: TmdbTitle }) {
-	const release = useRelease(title).data;
-	if (!release) return null;
-	return <ReleasePill release={release} />;
+	const info = useRelease(title).data;
+	if (!info) return null;
+	return (
+		<>
+			<GenreLine genres={info.genres} />
+			{info.release && <ReleasePill release={info.release} />}
+		</>
+	);
 }

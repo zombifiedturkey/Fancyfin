@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	formatReleaseDate,
+	parseGenreNames,
 	parseMovieRelease,
 	parseTvRelease,
 } from "./release";
@@ -201,5 +202,16 @@ describe("parseTvRelease", () => {
 			),
 		).toEqual({ status: "Premieres 1 Feb 2027" });
 		expect(parseTvRelease({ status: "Whatever" }, now)).toBeUndefined();
+	});
+});
+
+describe("parseGenreNames", () => {
+	it("lists the genre names", () => {
+		expect(
+			parseGenreNames({
+				genres: [{ name: "Horror" }, { name: " Thriller " }, { id: 1 }],
+			}),
+		).toEqual(["Horror", "Thriller"]);
+		expect(parseGenreNames(null)).toEqual([]);
 	});
 });
