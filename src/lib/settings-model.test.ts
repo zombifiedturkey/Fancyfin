@@ -37,6 +37,7 @@ describe("sanitizeSettings", () => {
 			{ id: "recent", visible: false },
 			{ id: "continue", visible: true },
 			{ id: "nextup", visible: true },
+			{ id: "discover", visible: true },
 		]);
 	});
 
@@ -90,8 +91,9 @@ describe("moveRow", () => {
 			"nextup",
 			"continue",
 			"recent",
+			"discover",
 		]);
 		expect(moveRow(rows, "continue", -1)).toBe(rows);
-		expect(moveRow(rows, "recent", 1)).toBe(rows);
+		expect(moveRow(rows, "discover", 1)).toBe(rows);
 	});
 });

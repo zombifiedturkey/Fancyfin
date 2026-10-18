@@ -20,7 +20,7 @@ cp .env.example .env.local        # Windows PowerShell: Copy-Item .env.example .
 pnpm dev                          # add --host to open it from your phone on the same network
 ```
 
-Optional: add `TMDB_API_KEY=...` to `.env.local` to turn on the "popular right now" banner (see [Popular banner](#popular-banner-tmdb)).
+Optional: add `TMDB_API_KEY=...` to `.env.local` to turn on the "popular right now" banner (see [Popular banner](#popular-banner-tmdb)), and `RADARR_URL`/`RADARR_API_KEY` or `SONARR_URL`/`SONARR_API_KEY` for the Add buttons (see [Add to Radarr and Sonarr](#add-to-radarr-and-sonarr); the dev proxy doesn't check for administrators).
 
 The app calls Jellyfin through `/api`, which the Vite dev server (and the Docker image's nginx) proxy to `JELLYFIN_URL`. That means no CORS setup is needed on the Jellyfin server.
 
@@ -55,6 +55,18 @@ The featured banner on Home and the Movies and TV Shows pages can show what's po
 
 The key stays on the server: the browser only talks to `/tmdb` on your Fancyfin address, and nginx adds the key. Never commit the key to the repository. Without a key the banner shows recently added titles.
 
+### Add to Radarr and Sonarr
+
+Titles in the banner (and the **Discover** row on Home) that you don't have can be sent straight to [Radarr](https://radarr.video/) (movies) or [Sonarr](https://sonarr.tv/) (TV) so they get collected. Only **Jellyfin administrators** see the buttons.
+
+1. Set `RADARR_URL` and `RADARR_API_KEY` for movies, and/or `SONARR_URL` and `SONARR_API_KEY` for TV. The address is the one Fancyfin's container can reach (e.g. `http://192.168.1.20:7878`; include the URL base if you set one). The key is in each app under **Settings, General**.
+2. `JELLYFIN_URL` must be set too: Fancyfin asks Jellyfin whether the caller is an administrator before it lets any request through to Radarr or Sonarr.
+3. TMDB (above) is needed for the banner and Discover row, which is where the Add buttons live.
+
+Click **Add to Radarr / Sonarr** and a window lets you pick the match (if it guessed wrong), root folder (with free space), quality profile, minimum availability (movies) or monitoring and series type (shows), and whether to start searching straight away. Tick **Next time, skip this window** to add in one click with the same settings; turn that back off in **Settings**.
+
+The keys stay on the server: the browser only talks to `/radarr` and `/sonarr` on your Fancyfin address, nginx adds the key, and only the few calls the window needs are allowed. Works with Radarr v5 and Sonarr v4. Never commit the keys to the repository.
+
 ### Settings
 
 The avatar menu has **Settings**: accent colour, poster corners and size, glass strength, titles under posters, banner size and source, which Home rows show and in what order, episode layout and animations. They are saved in the browser you change them in.
@@ -80,14 +92,14 @@ GitHub Actions builds and publishes to `ghcr.io/zombifiedturkey/fancyfin`:
    ```
    (Or copy `unraid/fancyfin.xml` from this repo to `\\<unraid>\flash\config\plugins\dockerMan\templates-user\my-fancyfin.xml`.)
 2. **Docker** tab, **Add Container**, then pick **Fancyfin** from the template dropdown.
-3. Adjust the port if 8080 is taken. **Jellyfin URL** is optional: set it, or leave it empty to enter the address in Fancyfin on first use. **TMDB API key** is optional too (see above). **Apply**.
-   If you installed before the TMDB option existed, edit the container, choose **Add another Path, Port, Variable, Label or Device**, set Config Type **Variable**, Name `TMDB API key`, Key `TMDB_API_KEY`, and put your key in Value.
+3. Adjust the port if 8080 is taken. **Jellyfin URL** is optional: set it, or leave it empty to enter the address in Fancyfin on first use. **TMDB API key** is optional too (see above), as are the **Radarr** and **Sonarr** address and key pairs. **Apply**.
+   If you installed before the TMDB option existed, edit the container, choose **Add another Path, Port, Variable, Label or Device**, set Config Type **Variable**, Name `TMDB API key`, Key `TMDB_API_KEY`, and put your key in Value. Do the same for `RADARR_URL`, `RADARR_API_KEY`, `SONARR_URL` and `SONARR_API_KEY` if you want them (set the key variables to Mask).
 4. Open `http://<unraid-ip>:8080`.
 
 **Without the template**
 
 **Docker** tab, **Add Container**, leave the template empty and fill in:
-Repository `ghcr.io/zombifiedturkey/fancyfin:edge`, a port mapping to container port `80`, and optionally the variables `JELLYFIN_URL` and `TMDB_API_KEY`.
+Repository `ghcr.io/zombifiedturkey/fancyfin:edge`, a port mapping to container port `80`, and optionally the variables `JELLYFIN_URL`, `TMDB_API_KEY`, `RADARR_URL`, `RADARR_API_KEY`, `SONARR_URL` and `SONARR_API_KEY`.
 
 To pick up a new edge build, use **Check for updates** on the Docker tab, then **apply update** on the container. If the package is private, make it public in the repository's package settings on GitHub, or run `docker login ghcr.io` on the server with a token that has `read:packages`.
 

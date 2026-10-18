@@ -72,3 +72,71 @@ export function Switch({
 		</span>
 	);
 }
+
+/** A labelled drop-down in the glass style. Give it <option> elements. */
+export function SelectField({
+	label,
+	value,
+	onChange,
+	children,
+	disabled = false,
+}: {
+	label: string;
+	value: string;
+	onChange: (value: string) => void;
+	children: ReactNode;
+	disabled?: boolean;
+}) {
+	return (
+		<label className="block min-w-0">
+			<span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-faint">
+				{label}
+			</span>
+			<span className="relative mt-1.5 block">
+				<select
+					value={value}
+					disabled={disabled}
+					onChange={(event) => onChange(event.target.value)}
+					className="glass w-full cursor-pointer appearance-none truncate rounded-card py-3 pl-4 pr-10 text-sm text-ink outline-none transition-colors hover:bg-glass-strong disabled:cursor-default disabled:opacity-50 [&>option]:bg-canvas-raised [&>option]:text-ink"
+				>
+					{children}
+				</select>
+				<svg
+					aria-hidden
+					viewBox="0 0 24 24"
+					className="pointer-events-none absolute right-4 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
+					fill="none"
+					stroke="currentColor"
+					strokeWidth="2.5"
+					strokeLinecap="round"
+					strokeLinejoin="round"
+				>
+					<path d="M6 9l6 6 6-6" />
+				</svg>
+			</span>
+		</label>
+	);
+}
+
+/** A tick box with its label beside it. */
+export function CheckField({
+	checked,
+	onChange,
+	children,
+}: {
+	checked: boolean;
+	onChange: (checked: boolean) => void;
+	children: ReactNode;
+}) {
+	return (
+		<label className="flex cursor-pointer items-center gap-3 text-sm">
+			<input
+				type="checkbox"
+				checked={checked}
+				onChange={(event) => onChange(event.target.checked)}
+				className="size-4 shrink-0 cursor-pointer accent-(--color-accent)"
+			/>
+			<span>{children}</span>
+		</label>
+	);
+}

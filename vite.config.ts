@@ -32,8 +32,30 @@ export default defineConfig(({ mode }) => {
 			}
 		: {};
 
+	// Radarr and Sonarr, for the Add button. Same idea: the key stays in this process. The production
+	// image also checks that the caller is a Jellyfin administrator; this dev proxy does not.
+	const arrProxy = (
+		name: "radarr" | "sonarr",
+		url: string | undefined,
+		key: string | undefined,
+	): Record<string, ProxyOptions> => {
+		if (!url || !key) return {};
+		const parsed = new URL(url);
+		const base = parsed.pathname.replace(/\/+$/, "");
+		return {
+			[`/${name}`]: {
+				target: parsed.origin,
+				changeOrigin: true,
+				headers: { "X-Api-Key": key },
+				rewrite: (path: string) => `${base}${path.slice(name.length + 1)}`,
+			},
+		};
+	};
+
 	const proxy = {
 		...tmdbProxy,
+		...arrProxy("radarr", env.RADARR_URL, env.RADARR_API_KEY),
+		...arrProxy("sonarr", env.SONARR_URL, env.SONARR_API_KEY),
 		"/api": {
 			target: jellyfinUrl,
 			changeOrigin: true,

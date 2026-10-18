@@ -15,3 +15,10 @@ services:
       # Optional. A TMDB API key (or read access token) turns on the "popular right now" banner.
       # It stays on the server; the browser never sees it. Leave it out to use recently added titles.
       TMDB_API_KEY: ""
+      # Optional. Radarr and/or Sonarr turn on an "Add" button (Jellyfin administrators only) for popular
+      # titles you don't have. Needs JELLYFIN_URL, so Fancyfin can tell who is an administrator.
+      # Each app needs both its address and its API key (Settings > General in Radarr / Sonarr).
+      RADARR_URL: ""
+      RADARR_API_KEY: ""
+      SONARR_URL: ""
+      SONARR_API_KEY: ""

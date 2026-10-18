@@ -15,13 +15,19 @@ export const ACCENTS = [
 
 export type AccentId = (typeof ACCENTS)[number]["id"] | "custom";
 
-export const HOME_ROW_IDS = ["continue", "nextup", "recent"] as const;
+export const HOME_ROW_IDS = [
+	"continue",
+	"nextup",
+	"recent",
+	"discover",
+] as const;
 export type HomeRowId = (typeof HOME_ROW_IDS)[number];
 
 export const HOME_ROW_LABELS: Record<HomeRowId, string> = {
 	continue: "Continue Watching",
 	nextup: "Next Up",
 	recent: "Recently Added",
+	discover: "Discover",
 };
 
 export type Corners = "round" | "soft" | "square";

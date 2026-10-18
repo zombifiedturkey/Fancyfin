@@ -20,10 +20,22 @@ The working to-do list. `PLAN.md` holds the original goals and milestones; this 
 - [x] Obvious switch on the banner to hide titles you don't own (also in Settings).
 - [x] Source setting: Popular / Popular + recent / Recently added.
 - [ ] Try it with a real key on Unraid.
-- [ ] Possible: a "request this" button for titles you don't own (needs Jellyseerr or similar).
 - [ ] Possible: genre pages using TMDB's genre charts (they use recently added for now).
 
-### 2. Customisation (built, needs testing)
+### 2. Add to Radarr and Sonarr (built, needs testing)
+
+Collect the titles the banner shows that the library lacks.
+
+- [x] Server-side proxies `/radarr` and `/sonarr` (`RADARR_URL`/`RADARR_API_KEY`, `SONARR_URL`/`SONARR_API_KEY`); keys never reach the browser, only the calls the dialog needs are allowed.
+- [x] Jellyfin administrators only, enforced by nginx (`auth_request` against an admin-only Jellyfin endpoint), so it needs `JELLYFIN_URL`.
+- [x] Add dialog: pick another match, root folder with free space, quality profile, minimum availability (Radarr) or monitor and series type (Sonarr), start searching straight away.
+- [x] "Next time, skip this window": add in one click with the last settings; switch back in Settings.
+- [x] Add button on "Not in your library" banner slides and a **Discover** row on Home.
+- [ ] Try it on Unraid with real Radarr and Sonarr (check a non-admin gets refused).
+- [ ] Possible: show "In Radarr, waiting for download" on titles already added.
+- [ ] Possible: Add from search results and title pages; tags and language profiles.
+
+### 3. Customisation (built, needs testing)
 
 Settings dialog from the avatar menu, saved per browser, applied before first paint.
 
@@ -39,7 +51,7 @@ Settings dialog from the avatar menu, saved per browser, applied before first pa
 - [ ] Possible: sync settings to the Jellyfin account instead of just the browser
 - [ ] Possible: light theme, font size, density
 
-### 3. Better seasons (built, needs testing)
+### 4. Better seasons (built, needs testing)
 
 - [x] Season pills with watched counts, specials last
 - [x] Episode list with thumbnail, number, runtime, air date, description and a play button

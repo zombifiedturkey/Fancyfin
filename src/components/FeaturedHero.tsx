@@ -1,12 +1,14 @@
 import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models/base-item-dto";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
+import { arrForKind, useArrAvailability } from "../lib/arr-queries";
 import type { FeaturedEntry } from "../lib/featured";
 import { formatRuntime, ticksToMinutes } from "../lib/format";
 import { backdropImage, logoImage } from "../lib/images";
 import { usePeek } from "../lib/peek";
 import { updateSettings, useMotionReduced, useSettings } from "../lib/settings";
 import { tmdbImage, tmdbPage, useTmdbEnabled } from "../lib/tmdb";
+import { AddToArrButton } from "./AddToArrButton";
 import { Switch } from "./controls";
 import { FadeImage } from "./FadeImage";
 import { PlayButton } from "./PlayButton";
@@ -61,9 +63,12 @@ export function FeaturedHero({ entries, eyebrow }: FeaturedHeroProps) {
 	const reduceMotion = useMotionReduced();
 	const settings = useSettings();
 	const tmdbOn = useTmdbEnabled();
+	const arr = useArrAvailability();
 	const peek = usePeek();
 	const [index, setIndex] = useState(0);
 	const [paused, setPaused] = useState(false);
+	// The Add dialog is open: don't slide away from the title it is about.
+	const [dialogOpen, setDialogOpen] = useState(false);
 
 	const count = entries.length;
 	const current = entries[index % count];
@@ -72,13 +77,13 @@ export function FeaturedHero({ entries, eyebrow }: FeaturedHeroProps) {
 		setIndex((i) => (i + count + direction) % count);
 
 	useEffect(() => {
-		if (count < 2 || paused || reduceMotion) return;
+		if (count < 2 || paused || dialogOpen || reduceMotion) return;
 		const timer = window.setInterval(
 			() => setIndex((i) => (i + 1) % count),
 			SLIDE_MS,
 		);
 		return () => window.clearInterval(timer);
-	}, [count, paused, reduceMotion]);
+	}, [count, paused, dialogOpen, reduceMotion]);
 
 	if (!current) return null;
 
@@ -217,14 +222,25 @@ export function FeaturedHero({ entries, eyebrow }: FeaturedHeroProps) {
 									)}
 								</>
 							) : discover ? (
-								<a
-									href={tmdbPage(discover)}
-									target="_blank"
-									rel="noopener noreferrer"
-									className="flex cursor-pointer items-center gap-2 rounded-pill bg-ink px-6 py-3 text-sm font-semibold text-canvas transition-opacity hover:opacity-90"
-								>
-									View on TMDB
-								</a>
+								<>
+									<AddToArrButton
+										title={discover}
+										variant="hero"
+										onDialogChange={setDialogOpen}
+									/>
+									<a
+										href={tmdbPage(discover)}
+										target="_blank"
+										rel="noopener noreferrer"
+										className={
+											arr[arrForKind(discover.kind)]
+												? "glass cursor-pointer rounded-pill px-6 py-3 text-sm font-semibold text-ink transition-colors hover:bg-glass-strong"
+												: "flex cursor-pointer items-center gap-2 rounded-pill bg-ink px-6 py-3 text-sm font-semibold text-canvas transition-opacity hover:opacity-90"
+										}
+									>
+										View on TMDB
+									</a>
+								</>
 							) : null}
 						</div>
 					</motion.div>

@@ -9,11 +9,14 @@ export function Modal({
 	onClose,
 	children,
 	size = "md",
+	bare = false,
 }: {
 	title: string;
 	onClose: () => void;
 	children: ReactNode;
 	size?: "md" | "lg";
+	/** No title bar: the content draws its own heading, and only the close button floats top right. */
+	bare?: boolean;
 }) {
 	const reduceMotion = useMotionReduced();
 
@@ -28,6 +31,27 @@ export function Modal({
 		window.addEventListener("keydown", onKeyDown, true);
 		return () => window.removeEventListener("keydown", onKeyDown, true);
 	}, [onClose]);
+
+	const closeButton = (
+		<button
+			type="button"
+			aria-label="Close"
+			onClick={onClose}
+			className="glass flex size-9 cursor-pointer items-center justify-center rounded-full text-ink transition-colors hover:bg-glass-strong"
+		>
+			<svg
+				aria-hidden
+				viewBox="0 0 24 24"
+				className="size-4"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="2.5"
+				strokeLinecap="round"
+			>
+				<path d="M6 6l12 12M18 6L6 18" />
+			</svg>
+		</button>
+	);
 
 	// Rendered on <body>: inside the title panel, its blur and animation would trap a fixed element.
 	return createPortal(
@@ -52,28 +76,17 @@ export function Modal({
 					ease: [0.16, 1, 0.3, 1],
 				}}
 			>
-				<div className="flex items-center justify-between gap-4 px-6 pb-3 pt-5">
-					<h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-					<button
-						type="button"
-						aria-label="Close"
-						onClick={onClose}
-						className="glass flex size-9 cursor-pointer items-center justify-center rounded-full text-ink transition-colors hover:bg-glass-strong"
-					>
-						<svg
-							aria-hidden
-							viewBox="0 0 24 24"
-							className="size-4"
-							fill="none"
-							stroke="currentColor"
-							strokeWidth="2.5"
-							strokeLinecap="round"
-						>
-							<path d="M6 6l12 12M18 6L6 18" />
-						</svg>
-					</button>
+				{bare ? (
+					<div className="absolute right-4 top-4 z-10">{closeButton}</div>
+				) : (
+					<div className="flex items-center justify-between gap-4 px-6 pb-3 pt-5">
+						<h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+						{closeButton}
+					</div>
+				)}
+				<div className={`overflow-y-auto px-6 pb-6 ${bare ? "pt-6" : ""}`}>
+					{children}
 				</div>
-				<div className="overflow-y-auto px-6 pb-6">{children}</div>
 			</motion.div>
 		</div>,
 		document.body,

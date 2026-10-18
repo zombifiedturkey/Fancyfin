@@ -1,0 +1,24 @@
+# One of Radarr or Sonarr, through this server so the API key never reaches the browser.
+# Administrators only (see arr-admin.conf.template), and only the handful of calls the Add dialog
+# makes: look a title up, list quality profiles and root folders, and add the title.
+# Filled in at container start by docker/10-fancyfin-proxy.sh.
+location ~ ^/__APP__/api/v3/(qualityprofile|rootfolder|__KIND__/lookup)$ {
+    limit_except GET { deny all; }
+    set $arr_origin "__ORIGIN__";
+    set $arr_host "__HOST__";
+    set $arr_base "__BASE__";
+    set $arr_key "__KEY__";
+    include /etc/nginx/fancyfin-arr-proxy.inc;
+}
+
+location = /__APP__/api/v3/__KIND__ {
+    limit_except POST { deny all; }
+    set $arr_origin "__ORIGIN__";
+    set $arr_host "__HOST__";
+    set $arr_base "__BASE__";
+    set $arr_key "__KEY__";
+    include /etc/nginx/fancyfin-arr-proxy.inc;
+}
+
+# Anything else under /__APP__/ is not available.
+location /__APP__/ { return 404; }

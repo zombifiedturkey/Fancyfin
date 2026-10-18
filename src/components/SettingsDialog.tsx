@@ -1,4 +1,7 @@
 import type { ReactNode } from "react";
+import { ARR_LABEL, type ArrApp } from "../lib/arr";
+import { saveArrPrefs, useArrPrefs } from "../lib/arr-prefs";
+import { useArrAvailability } from "../lib/arr-queries";
 import { resetSettings, updateSettings, useSettings } from "../lib/settings";
 import {
 	ACCENTS,
@@ -47,6 +50,9 @@ const smallButton =
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
 	const settings = useSettings();
 	const tmdb = useTmdbEnabled();
+	const arr = useArrAvailability();
+	const arrPrefs = useArrPrefs();
+	const arrApps = (["radarr", "sonarr"] as const).filter((app) => arr[app]);
 	const customChosen = settings.accent === "custom";
 
 	return (
@@ -204,7 +210,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 
 				<Setting
 					label="Home rows"
-					hint="Reorder or hide the rows under the banner."
+					hint="Reorder or hide the rows under the banner. Discover only appears for administrators once Radarr or Sonarr is set up."
 				>
 					<ul className="space-y-2">
 						{settings.homeRows.map((row, index) => (
@@ -260,6 +266,27 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 					</ul>
 				</Setting>
 			</Section>
+
+			{arrApps.length > 0 && (
+				<Section title="Radarr and Sonarr">
+					{arrApps.map((app: ArrApp) => (
+						<Setting
+							key={app}
+							label={ARR_LABEL[app]}
+							hint="Off means titles are added straight away, using the settings you chose last time."
+						>
+							<Switch
+								checked={!arrPrefs[app].skip}
+								onChange={(ask) =>
+									saveArrPrefs(app, { ...arrPrefs[app], skip: !ask })
+								}
+							>
+								Ask me where to put it before adding to {ARR_LABEL[app]}
+							</Switch>
+						</Setting>
+					))}
+				</Section>
+			)}
 
 			<Section title="TV seasons">
 				<Setting label="Episode layout">

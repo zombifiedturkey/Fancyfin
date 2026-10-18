@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseTrending, tmdbImage, tmdbPage } from "./tmdb";
+import { parseTrending, parseTvdbId, tmdbImage, tmdbPage } from "./tmdb";
 
 describe("parseTrending", () => {
 	const movie = {
@@ -7,6 +7,7 @@ describe("parseTrending", () => {
 		title: "Zog",
 		overview: "A dragon.",
 		backdrop_path: "/a.jpg",
+		poster_path: "/p.jpg",
 		release_date: "2026-05-01",
 		vote_average: 7.84,
 		popularity: 90.5,
@@ -20,6 +21,7 @@ describe("parseTrending", () => {
 				title: "Zog",
 				overview: "A dragon.",
 				backdrop: "/a.jpg",
+				poster: "/p.jpg",
 				year: 2026,
 				rating: 7.84,
 				popularity: 90.5,
@@ -43,6 +45,7 @@ describe("parseTrending", () => {
 		expect(show?.title).toBe("Crystal Lake");
 		expect(show?.year).toBe(2024);
 		expect(show?.rating).toBeUndefined();
+		expect(show?.poster).toBeUndefined();
 	});
 
 	it("skips entries with no picture, no description or no id, and bad input", () => {
@@ -76,5 +79,13 @@ describe("links", () => {
 				popularity: 1,
 			}),
 		).toBe("https://www.themoviedb.org/tv/5");
+	});
+});
+
+describe("parseTvdbId", () => {
+	it("reads the id, and nothing when there isn't one", () => {
+		expect(parseTvdbId({ tvdb_id: 393189 })).toBe(393189);
+		expect(parseTvdbId({ tvdb_id: null })).toBeUndefined();
+		expect(parseTvdbId(null)).toBeUndefined();
 	});
 });

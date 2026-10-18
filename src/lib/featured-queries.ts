@@ -6,6 +6,7 @@ import {
 	useQueryClient,
 } from "@tanstack/react-query";
 import { useSession } from "../auth/AuthProvider";
+import { useArrAvailability } from "./arr-queries";
 import {
 	buildFeatured,
 	type FeaturedEntry,
@@ -78,17 +79,12 @@ async function fetchOwned(
 	return items;
 }
 
-/** This week's popular titles from TMDB, each paired with the library's copy when there is one. */
-async function fetchPopular(
+/** This week's trending titles, one list per kind. Cached, so the banner and Discover share them. */
+function loadTrending(
 	queryClient: QueryClient,
-	userId: string,
-	kind: LibraryKind | undefined,
-	signal?: AbortSignal,
-): Promise<PopularMatch[]> {
-	const kinds: TmdbKind[] =
-		kind === "movies" ? ["movie"] : kind === "shows" ? ["tv"] : ["movie", "tv"];
-
-	const lists = await Promise.all(
+	kinds: TmdbKind[],
+): Promise<TmdbTitle[][]> {
+	return Promise.all(
 		kinds.map((tmdbKind) =>
 			queryClient.fetchQuery({
 				queryKey: ["tmdb", "trending", tmdbKind],
@@ -97,12 +93,14 @@ async function fetchPopular(
 			}),
 		),
 	);
-	const titles: TmdbTitle[] = (
-		lists.length === 2
-			? interleave(lists[0] ?? [], lists[1] ?? [])
-			: (lists[0] ?? [])
-	).slice(0, POPULAR_CANDIDATES);
+}
 
+/** What the library has, as a TMDB id index per kind. */
+async function loadIndexes(
+	queryClient: QueryClient,
+	userId: string,
+	kinds: TmdbKind[],
+): Promise<Map<TmdbKind, Map<number, string>>> {
 	const indexes = new Map<TmdbKind, Map<number, string>>();
 	await Promise.all(
 		kinds.map(async (tmdbKind) => {
@@ -117,6 +115,27 @@ async function fetchPopular(
 			);
 		}),
 	);
+	return indexes;
+}
+
+/** This week's popular titles from TMDB, each paired with the library's copy when there is one. */
+async function fetchPopular(
+	queryClient: QueryClient,
+	userId: string,
+	kind: LibraryKind | undefined,
+	signal?: AbortSignal,
+): Promise<PopularMatch[]> {
+	const kinds: TmdbKind[] =
+		kind === "movies" ? ["movie"] : kind === "shows" ? ["tv"] : ["movie", "tv"];
+
+	const lists = await loadTrending(queryClient, kinds);
+	const titles: TmdbTitle[] = (
+		lists.length === 2
+			? interleave(lists[0] ?? [], lists[1] ?? [])
+			: (lists[0] ?? [])
+	).slice(0, POPULAR_CANDIDATES);
+
+	const indexes = await loadIndexes(queryClient, userId, kinds);
 
 	const itemIds = titles.flatMap((title) => {
 		const id = indexes.get(title.kind)?.get(title.id);
@@ -173,6 +192,42 @@ export function useFeatured(
 				}
 			}
 			return buildFeatured({ source, discover, recent, popular });
+		},
+	});
+}
+
+const DISCOVER_LIMIT = 20;
+
+/**
+ * Popular titles the library doesn't have, for the Discover row. Movies only count when Radarr can
+ * add them, shows only when Sonarr can.
+ */
+export function useDiscover() {
+	const { userId } = useSession();
+	const queryClient = useQueryClient();
+	const available = useArrAvailability();
+
+	const kinds: TmdbKind[] = [];
+	if (available.radarr) kinds.push("movie");
+	if (available.sonarr) kinds.push("tv");
+
+	return useQuery({
+		queryKey: ["home", userId, "discover", kinds.join(",")],
+		enabled: kinds.length > 0,
+		queryFn: async (): Promise<TmdbTitle[]> => {
+			const [lists, indexes] = await Promise.all([
+				loadTrending(queryClient, kinds),
+				loadIndexes(queryClient, userId, kinds),
+			]);
+			const titles =
+				lists.length === 2
+					? interleave(lists[0] ?? [], lists[1] ?? [])
+					: (lists[0] ?? []);
+			return titles
+				.filter(
+					(title) => title.poster && !indexes.get(title.kind)?.has(title.id),
+				)
+				.slice(0, DISCOVER_LIMIT);
 		},
 	});
 }

@@ -11,6 +11,8 @@ export type TmdbTitle = {
 	overview: string;
 	/** TMDB image path, like "/abc.jpg". */
 	backdrop: string;
+	/** TMDB image path of the poster, when there is one. */
+	poster?: string;
 	year?: number;
 	rating?: number;
 	popularity: number;
@@ -35,6 +37,8 @@ export function parseTrending(kind: TmdbKind, json: unknown): TmdbTitle[] {
 		const overview = text(row.overview);
 		if (typeof id !== "number" || !title || !backdrop || !overview) continue;
 
+		const poster = text(row.poster_path);
+
 		const date = text(kind === "movie" ? row.release_date : row.first_air_date);
 		const year = Number.parseInt(date.slice(0, 4), 10);
 		const rating = typeof row.vote_average === "number" ? row.vote_average : 0;
@@ -44,6 +48,7 @@ export function parseTrending(kind: TmdbKind, json: unknown): TmdbTitle[] {
 			title,
 			overview,
 			backdrop,
+			poster: poster || undefined,
 			year: Number.isNaN(year) ? undefined : year,
 			rating: rating > 0 ? rating : undefined,
 			popularity: typeof row.popularity === "number" ? row.popularity : 0,
@@ -53,12 +58,31 @@ export function parseTrending(kind: TmdbKind, json: unknown): TmdbTitle[] {
 }
 
 /** TMDB's image CDN. These need no key, so the browser loads them directly. */
-export function tmdbImage(path: string, size: "w780" | "w1280"): string {
+export function tmdbImage(
+	path: string,
+	size: "w342" | "w500" | "w780" | "w1280",
+): string {
 	return `https://image.tmdb.org/t/p/${size}${path}`;
 }
 
 export function tmdbPage(title: TmdbTitle): string {
 	return `https://www.themoviedb.org/${title.kind}/${title.id}`;
+}
+
+/** The TVDB id of a TMDB show (Sonarr finds shows by it), from /tv/{id}/external_ids. */
+export function parseTvdbId(json: unknown): number | undefined {
+	const id = (json as { tvdb_id?: unknown } | null)?.tvdb_id;
+	return typeof id === "number" && id > 0 ? id : undefined;
+}
+
+/** Ask TMDB, through the server, which TVDB id a show has. */
+export async function fetchTvdbId(
+	tmdbId: number,
+	signal?: AbortSignal,
+): Promise<number | undefined> {
+	const response = await fetch(`/tmdb/tv/${tmdbId}/external_ids`, { signal });
+	if (!response.ok) throw new Error(`TMDB ${response.status}`);
+	return parseTvdbId(await response.json());
 }
 
 /** What's trending this week, through the server's /tmdb proxy (which holds the API key). */

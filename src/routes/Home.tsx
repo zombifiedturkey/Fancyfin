@@ -1,4 +1,5 @@
 import { useSession } from "../auth/AuthProvider";
+import { DiscoverShelf } from "../components/DiscoverShelf";
 import { FeaturedHero, HeroSkeleton } from "../components/FeaturedHero";
 import { Hero } from "../components/Hero";
 import { MediaShelf } from "../components/MediaShelf";
@@ -39,6 +40,8 @@ export function Home() {
 				{settings.homeRows
 					.filter((row) => row.visible)
 					.map((row) => {
+						// Popular titles the library lacks, with Add buttons. Appears only where it can be used.
+						if (row.id === "discover") return <DiscoverShelf key={row.id} />;
 						const { variant, query } = rows[row.id];
 						return (
 							<MediaShelf
