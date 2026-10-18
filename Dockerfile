@@ -9,12 +9,15 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
 
-# ---- Serve it with nginx, proxying /api to Jellyfin ----
+# ---- Serve it with nginx ----
 FROM nginx:stable-alpine
-# The official nginx image runs envsubst over /etc/nginx/templates/*.template at startup,
-# so ${JELLYFIN_URL} below is filled from the container's environment.
-COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
+# At start-up, docker/10-fancyfin-proxy.sh turns JELLYFIN_URL (optional) into the /api proxy config.
+# Without it the app asks for the Jellyfin address in the browser instead.
+COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+COPY nginx/proxy.conf.template /etc/fancyfin/proxy.conf.template
+COPY docker/10-fancyfin-proxy.sh /docker-entrypoint.d/10-fancyfin-proxy.sh
+RUN chmod +x /docker-entrypoint.d/10-fancyfin-proxy.sh
 COPY --from=build /app/dist /usr/share/nginx/html
 
-ENV JELLYFIN_URL=http://jellyfin:8096
+ENV JELLYFIN_URL=""
 EXPOSE 80

@@ -18,5 +18,5 @@
   <CPUset/>
   <DateInstalled/>
   <Config Name="WebUI Port" Target="80" Default="8080" Mode="tcp" Description="Port to open Fancyfin on." Type="Port" Display="always" Required="true" Mask="false">8080</Config>
-  <Config Name="Jellyfin URL" Target="JELLYFIN_URL" Default="http://192.168.1.50:8096" Mode="" Description="Address of your Jellyfin server as reachable from this container, for example http://192.168.1.50:8096" Type="Variable" Display="always" Required="true" Mask="false">http://192.168.1.50:8096</Config>
+  <Config Name="Jellyfin URL (optional)" Target="JELLYFIN_URL" Default="" Mode="" Description="Optional. Address of your Jellyfin server as reachable from this container, for example http://192.168.1.20:8096. Leave empty and Fancyfin asks for the address the first time you open it." Type="Variable" Display="always" Required="false" Mask="false"></Config>
 </Container>

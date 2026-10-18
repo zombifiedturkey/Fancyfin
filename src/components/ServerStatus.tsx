@@ -1,8 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchPublicServerInfo } from "../lib/server-info";
 
-/** Proves the /api proxy works end to end. Becomes part of the login screen in M1. */
-export function ServerStatus() {
+/** Shows whether the Jellyfin server is reachable, and lets the user pick a different one. */
+export function ServerStatus({
+	onChangeServer,
+}: {
+	onChangeServer?: () => void;
+}) {
 	const { data, error, isPending, refetch, isFetching } = useQuery({
 		queryKey: ["server", "public-info"],
 		queryFn: ({ signal }) => fetchPublicServerInfo(signal),
@@ -40,23 +44,26 @@ export function ServerStatus() {
 
 			{error && (
 				<p className="text-ink-muted">
-					{error instanceof Error ? error.message : "Unknown error"}. Check{" "}
-					<code className="rounded bg-glass px-1.5 py-0.5 text-xs">
-						JELLYFIN_URL
-					</code>{" "}
-					in{" "}
-					<code className="rounded bg-glass px-1.5 py-0.5 text-xs">
-						.env.local
-					</code>{" "}
-					and restart the dev server.
+					{error instanceof Error ? error.message : "Unknown error"}. Check the
+					server address.
 				</p>
+			)}
+
+			{onChangeServer && (
+				<button
+					type="button"
+					onClick={onChangeServer}
+					className="ml-auto rounded-pill px-3.5 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:text-ink"
+				>
+					Change server
+				</button>
 			)}
 
 			<button
 				type="button"
 				onClick={() => refetch()}
 				disabled={isFetching}
-				className="ml-auto rounded-pill bg-glass-strong px-3.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-white/15 disabled:opacity-50"
+				className={`${onChangeServer ? "" : "ml-auto "}rounded-pill bg-glass-strong px-3.5 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-white/15 disabled:opacity-50`}
 			>
 				{isFetching ? "Checking…" : "Recheck"}
 			</button>

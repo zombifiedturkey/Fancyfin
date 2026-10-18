@@ -232,7 +232,6 @@ export function SearchBox({
 						) : results.isPending ? (
 							<ul aria-hidden className="space-y-2 p-1">
 								{Array.from({ length: 4 }, (_, i) => (
-									// biome-ignore lint/suspicious/noArrayIndexKey: static skeleton placeholders
 									<li key={i} className="shimmer h-16 rounded-xl" />
 								))}
 							</ul>

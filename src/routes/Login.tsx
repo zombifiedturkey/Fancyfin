@@ -5,10 +5,13 @@ import { AnimatePresence, type MotionProps, motion } from "motion/react";
 import { type FormEvent, useState } from "react";
 import { useAuth } from "../auth/AuthProvider";
 import { Aurora } from "../components/Aurora";
+import { ConnectServer } from "../components/ConnectServer";
 import { ServerStatus } from "../components/ServerStatus";
 import { UserAvatar } from "../components/UserAvatar";
+import { getServerUrl } from "../lib/api-base";
 import { getHttpStatus } from "../lib/errors";
 import { api } from "../lib/jellyfin";
+import { loadRuntimeConfig } from "../lib/runtime-config";
 
 type Profile = {
 	id: string;
@@ -52,7 +55,7 @@ const fade: MotionProps = {
 	transition: { duration: 0.28, ease: [0.2, 0, 0, 1] },
 };
 
-export function Login() {
+function LoginScreen({ onChangeServer }: { onChangeServer: () => void }) {
 	const { state, signIn } = useAuth();
 	const [choice, setChoice] = useState<Choice | null>(null);
 	const [quickSigningInId, setQuickSigningInId] = useState<string | null>(null);
@@ -180,10 +183,55 @@ export function Login() {
 			</AnimatePresence>
 
 			<div className="mt-14 w-full max-w-md">
-				<ServerStatus />
+				<ServerStatus onChangeServer={onChangeServer} />
 			</div>
 		</div>
 	);
+}
+
+/**
+ * The login page. On a fresh Docker install with no JELLYFIN_URL, or when the user taps "Change server",
+ * it asks for the Jellyfin address first; otherwise it shows the profile picker.
+ */
+export function Login() {
+	const config = useQuery({
+		queryKey: ["runtime-config"],
+		queryFn: ({ signal }) => loadRuntimeConfig(signal),
+		staleTime: Number.POSITIVE_INFINITY,
+	});
+	const [changingServer, setChangingServer] = useState(false);
+	const hasChosenServer = getServerUrl() !== null;
+
+	if (!hasChosenServer && config.isPending) {
+		return (
+			<div className="relative isolate min-h-dvh">
+				<Aurora />
+			</div>
+		);
+	}
+
+	const needsServer =
+		changingServer || (!hasChosenServer && config.data?.proxy === false);
+
+	if (needsServer) {
+		return (
+			<div className="relative isolate flex min-h-dvh flex-col items-center justify-center px-4 py-16">
+				<Aurora />
+				<div className="mb-10 flex items-center gap-2.5 text-lg font-semibold tracking-tight">
+					<span
+						aria-hidden
+						className="inline-block size-6 rounded-full bg-linear-to-br from-accent-strong to-accent"
+					/>
+					Fancyfin
+				</div>
+				<ConnectServer
+					onCancel={changingServer ? () => setChangingServer(false) : undefined}
+				/>
+			</div>
+		);
+	}
+
+	return <LoginScreen onChangeServer={() => setChangingServer(true)} />;
 }
 
 function ProfileSkeleton() {

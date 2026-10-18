@@ -39,7 +39,10 @@ The app calls Jellyfin through `/api`, which the Vite dev server (and the Docker
 docker compose up --build         # then open http://localhost:8080
 ```
 
-Set `JELLYFIN_URL` in `docker-compose.yml` to the address of your Jellyfin server as seen from the container.
+`JELLYFIN_URL` is optional:
+
+- **Set it** (the address of your Jellyfin server as seen from the container, e.g. `http://192.168.1.20:8096`) and the container proxies to Jellyfin for you. No CORS setup is needed.
+- **Leave it empty** and Fancyfin asks for the Jellyfin address the first time you open it, then remembers it in your browser. In this mode your browser talks to Jellyfin directly, so the address must be reachable from the device you browse on, and (if Fancyfin is served over HTTPS) Jellyfin must be HTTPS too.
 
 ### Published images
 
@@ -62,13 +65,13 @@ GitHub Actions builds and publishes to `ghcr.io/zombifiedturkey/fancyfin`:
    ```
    (Or copy `unraid/fancyfin.xml` from this repo to `\\<unraid>\flash\config\plugins\dockerMan\templates-user\my-fancyfin.xml`.)
 2. **Docker** tab, **Add Container**, then pick **Fancyfin** from the template dropdown.
-3. Set **Jellyfin URL** to your Jellyfin address, for example `http://192.168.1.50:8096`, adjust the port if 8080 is taken, and **Apply**.
+3. Adjust the port if 8080 is taken. **Jellyfin URL** is optional: set it, or leave it empty to enter the address in Fancyfin on first use. **Apply**.
 4. Open `http://<unraid-ip>:8080`.
 
 **Without the template**
 
 **Docker** tab, **Add Container**, leave the template empty and fill in:
-Repository `ghcr.io/zombifiedturkey/fancyfin:edge`, a port mapping to container port `80`, and a variable `JELLYFIN_URL`.
+Repository `ghcr.io/zombifiedturkey/fancyfin:edge`, a port mapping to container port `80`, and optionally a variable `JELLYFIN_URL`.
 
 To pick up a new edge build, use **Check for updates** on the Docker tab, then **apply update** on the container. If the package is private, make it public in the repository's package settings on GitHub, or run `docker login ghcr.io` on the server with a token that has `read:packages`.
 

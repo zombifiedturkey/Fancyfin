@@ -1,5 +1,5 @@
 import { Jellyfin } from "@jellyfin/sdk";
-import { API_BASE } from "./api-base";
+import { API_BASE, getServerUrl } from "./api-base";
 
 const DEVICE_ID_KEY = "fancyfin.deviceId";
 
@@ -23,7 +23,10 @@ export const jellyfin = new Jellyfin({
 });
 
 /**
- * The shared SDK client, pointed at the same-origin /api proxy (no CORS, same in dev and prod).
+ * The shared SDK client. By default it talks to the same-origin /api proxy (no CORS); if the user entered a
+ * server address on the connect screen it talks to that server directly. Changing the server reloads the page.
  * The access token is set and cleared with `api.update({ accessToken })` by the auth provider.
  */
-export const api = jellyfin.createApi(`${window.location.origin}${API_BASE}`);
+export const api = jellyfin.createApi(
+	getServerUrl() ?? `${window.location.origin}${API_BASE}`,
+);

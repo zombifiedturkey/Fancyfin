@@ -9,5 +9,6 @@ services:
     ports:
       - "8080:80"
     environment:
-      # Address of your Jellyfin server as reachable from this container.
-      JELLYFIN_URL: "http://192.168.1.50:8096"
+      # Optional. Address of your Jellyfin server as reachable from this container.
+      # Leave it out (or empty) and Fancyfin asks for the address the first time you open it.
+      JELLYFIN_URL: ""
