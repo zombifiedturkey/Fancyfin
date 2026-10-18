@@ -28,7 +28,7 @@ Fancyfin is an independent project and is not affiliated with or endorsed by the
   <Requires>A running Jellyfin server. Optional: a free TMDB API key, Radarr and Sonarr.</Requires>
   <Category>MediaApp:Video</Category>
   <ExtraSearchTerms>jellyfin client frontend ui web radarr sonarr tmdb</ExtraSearchTerms>
-  <WebUI>http://[IP]:[PORT:8282]/</WebUI>
+  <WebUI>http://[IP]:[PORT:80]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/zombifiedturkey/Fancyfin/main/unraid/fancyfin.xml</TemplateURL>
   <ExtraParams/>
   <PostArgs/>
