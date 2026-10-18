@@ -442,7 +442,7 @@ export function arrErrorMessage(
 ): string {
 	const label = ARR_LABEL[app];
 	if (status === 401 || status === 403) {
-		return `Only Jellyfin administrators can add to ${label}. Sign in as one and try again.`;
+		return `${label} didn't allow that. Check the connection in Settings.`;
 	}
 	// 0 means the request never got an answer at all.
 	if ([0, 404, 502, 503, 504].includes(status)) {

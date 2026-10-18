@@ -314,7 +314,7 @@ describe("sanitizePrefs", () => {
 
 describe("arrErrorMessage", () => {
 	it("explains refusals", () => {
-		expect(arrErrorMessage("radarr", 403, "")).toMatch(/administrators/);
+		expect(arrErrorMessage("radarr", 403, "")).toMatch(/Check the connection/);
 		expect(arrErrorMessage("sonarr", 502, "")).toMatch(/couldn't reach Sonarr/);
 		expect(arrErrorMessage("radarr", 0, "")).toMatch(/couldn't reach Radarr/);
 	});

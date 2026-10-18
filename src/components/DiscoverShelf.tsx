@@ -47,8 +47,8 @@ function DiscoverCard({ title }: { title: TmdbTitle }) {
 }
 
 /**
- * Popular titles the library doesn't have, each with an Add button. Only for administrators on a
- * server where Radarr or Sonarr is set up; for everyone else it isn't there at all.
+ * Popular titles the library doesn't have, each with an Add button. Only there when Radarr or Sonarr
+ * is connected and working.
  */
 export function DiscoverShelf() {
 	const discover = useDiscover();

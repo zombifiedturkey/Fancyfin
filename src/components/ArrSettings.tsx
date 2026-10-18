@@ -231,7 +231,7 @@ function ArrCard({
 	);
 }
 
-/** Connect Radarr and Sonarr. Only shown to Jellyfin administrators. */
+/** Connect Radarr and Sonarr. Until they are connected and working, no Add buttons appear. */
 export function ArrSettings() {
 	const status = useArrStatus();
 
@@ -241,9 +241,8 @@ export function ArrSettings() {
 	if (status.isError) {
 		return (
 			<p className="text-sm text-ink-muted">
-				Not available on this server. Radarr and Sonarr need the Fancyfin image
-				with <code>JELLYFIN_URL</code> set, so Fancyfin can check who is an
-				administrator.
+				Not available on this server. Radarr and Sonarr need the latest Fancyfin
+				image, which includes the small service that keeps their connection.
 			</p>
 		);
 	}
@@ -251,8 +250,8 @@ export function ArrSettings() {
 	return (
 		<>
 			<p className="-mt-1 text-sm text-ink-muted">
-				Connect them and titles you don't have get an Add button. Only Jellyfin
-				administrators see it.
+				Connect them and titles you don't have get an Add button. Until they are
+				connected and working, the buttons stay hidden.
 			</p>
 			{!status.data.persistent && (
 				<p className="text-sm text-danger">

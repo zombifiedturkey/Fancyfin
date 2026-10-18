@@ -116,7 +116,7 @@ function AddButton({ title, variant, onDialogChange }: AddToArrButtonProps) {
 
 /**
  * "Add to Radarr" (movies) or "Add to Sonarr" (shows) for a title the library doesn't have.
- * Only appears for Jellyfin administrators, and only when that app is set up on the server.
+ * Only appears when that app is connected in Settings and the connection works.
  */
 export function AddToArrButton(props: AddToArrButtonProps) {
 	const available = useArrAvailable(arrForKind(props.title.kind));

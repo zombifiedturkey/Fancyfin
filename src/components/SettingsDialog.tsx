@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { useIsAdmin } from "../lib/admin-queries";
 import { resetSettings, updateSettings, useSettings } from "../lib/settings";
 import {
 	ACCENTS,
@@ -49,7 +48,6 @@ const smallButton =
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
 	const settings = useSettings();
 	const tmdb = useTmdbEnabled();
-	const isAdmin = useIsAdmin().data === true;
 	const customChosen = settings.accent === "custom";
 
 	return (
@@ -207,7 +205,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 
 				<Setting
 					label="Home rows"
-					hint="Reorder or hide the rows under the banner. Discover only appears for administrators once Radarr or Sonarr is set up."
+					hint="Reorder or hide the rows under the banner. Discover appears once Radarr or Sonarr is connected below."
 				>
 					<ul className="space-y-2">
 						{settings.homeRows.map((row, index) => (
@@ -264,11 +262,9 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 				</Setting>
 			</Section>
 
-			{isAdmin && (
-				<Section title="Radarr and Sonarr">
-					<ArrSettings />
-				</Section>
-			)}
+			<Section title="Radarr and Sonarr">
+				<ArrSettings />
+			</Section>
 
 			<Section title="TV seasons">
 				<Setting label="Episode layout">

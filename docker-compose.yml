@@ -16,5 +16,5 @@ services:
       # It stays on the server; the browser never sees it. Leave it out to use recently added titles.
       TMDB_API_KEY: ""
     volumes:
-      # Where Settings saves the Radarr and Sonarr connection (needs JELLYFIN_URL above).
+      # Where Settings saves the Radarr and Sonarr connection .
       - ./config:/config

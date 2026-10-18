@@ -5,7 +5,6 @@ import {
 	useQuery,
 	useQueryClient,
 } from "@tanstack/react-query";
-import { useIsAdmin } from "./admin-queries";
 import {
 	ARR_KIND,
 	ARR_LABEL,
@@ -25,12 +24,10 @@ import {
 	searchTerm,
 } from "./arr";
 import { getArrPrefs } from "./arr-prefs";
-import { api } from "./jellyfin";
 import {
 	fetchTvdbId,
 	type TmdbKind,
 	type TmdbTitle,
-	useRuntimeConfig,
 } from "./tmdb";
 
 /** Radarr adds movies; Sonarr adds series. */
@@ -51,7 +48,7 @@ export class ArrError extends Error {
 
 /**
  * A call to the Fancyfin server's settings service (/arr), which keeps the Radarr and Sonarr keys
- * and only lets Jellyfin administrators through. The Jellyfin token is how it knows who is asking.
+ * and passes on only the few calls the Add dialog needs.
  * `app` is only used to word errors; leave it out for calls that aren't about one app.
  */
 async function arrApi(
@@ -75,7 +72,6 @@ async function arrApi(
 			signal: init.signal,
 			headers: {
 				Accept: "application/json",
-				"X-Emby-Token": api.accessToken ?? "",
 				...(hasBody ? { "Content-Type": "application/json" } : {}),
 			},
 			body: hasBody ? JSON.stringify(init.body) : undefined,
@@ -100,16 +96,12 @@ function arrRequest(
 }
 
 /**
- * What is connected, and whether it is working. Only administrators can ask; for anyone else, or on
- * a server without the settings service (no JELLYFIN_URL), this stays empty and Radarr and Sonarr
- * are simply not offered.
+ * What is connected, and whether it is working. Stays empty on a server without the settings
+ * service, in which case Radarr and Sonarr are simply not offered.
  */
 export function useArrStatus() {
-	const config = useRuntimeConfig();
-	const admin = useIsAdmin();
 	return useQuery({
 		queryKey: ["arr", "status"],
-		enabled: admin.data === true && config.data?.proxy === true,
 		staleTime: 30_000,
 		retry: false,
 		queryFn: async ({ signal }): Promise<ArrStatus> => {
@@ -123,13 +115,15 @@ export function useArrStatus() {
 	});
 }
 
-/** Which of Radarr and Sonarr this person can use: connected in Settings, and they're an administrator. */
+/**
+ * Which of Radarr and Sonarr can be used: connected in Settings, and the saved address and key
+ * worked when last checked. Until then none of the Add buttons appear anywhere.
+ */
 export function useArrAvailability(): Record<ArrApp, boolean> {
-	const status = useArrStatus().data;
-	return {
-		radarr: status?.apps.radarr.configured === true,
-		sonarr: status?.apps.sonarr.configured === true,
-	};
+	const apps = useArrStatus().data?.apps;
+	const usable = (app: ArrApp) =>
+		apps?.[app].configured === true && !apps[app].error;
+	return { radarr: usable("radarr"), sonarr: usable("sonarr") };
 }
 
 export function useArrAvailable(app: ArrApp): boolean {

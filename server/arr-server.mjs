@@ -1,8 +1,7 @@
 // Fancyfin's small settings service. It runs inside the container, next to nginx, and nginx forwards
 // /arr/ to it. It exists because Radarr and Sonarr need an API key, and keys must never reach the
 // browser. It:
-//   - keeps the Radarr and Sonarr address and key in a file in the config folder,
-//   - only talks to anyone who is a Jellyfin administrator (it asks Jellyfin), and
+//   - keeps the Radarr and Sonarr address and key in a file in the config folder, and
 //   - passes a short list of calls on to Radarr and Sonarr, adding the key.
 // No dependencies: Node 22's built-in http and fetch are enough.
 import { randomBytes } from "node:crypto";
@@ -18,7 +17,6 @@ export const APPS = {
 };
 
 const MAX_BODY = 1024 * 1024;
-const ADMIN_CACHE_MS = 30_000;
 const COUNT_CACHE_MS = 60_000;
 
 /** A clean http(s) address with no trailing slash, or undefined. */
@@ -111,33 +109,9 @@ class HttpFailure extends Error {
 }
 
 /** Create the request handler. Separate from listen() so tests can start it on any port. */
-export function createServer({ jellyfinUrl, configDir }) {
-	const jellyfin = jellyfinUrl.replace(/\/+$/, "");
+export function createServer({ configDir }) {
 	const { file, persistent } = configLocation(configDir);
-	const adminUntil = new Map();
 	const counts = new Map();
-
-	async function isAdmin(token) {
-		if (!token) return false;
-		const until = adminUntil.get(token);
-		if (until && until > Date.now()) return true;
-		try {
-			// Only administrators may list API keys, so this is a simple "are you an admin?" test.
-			const response = await fetch(`${jellyfin}/Auth/Keys`, {
-				headers: { "X-Emby-Token": token },
-				signal: AbortSignal.timeout(10_000),
-			});
-			if (!response.ok) return false;
-		} catch {
-			throw new HttpFailure(
-				502,
-				"Fancyfin couldn't reach Jellyfin to check who you are.",
-			);
-		}
-		if (adminUntil.size > 200) adminUntil.clear();
-		adminUntil.set(token, Date.now() + ADMIN_CACHE_MS);
-		return true;
-	}
 
 	/** Call Radarr or Sonarr with a key. Returns the fetch Response. */
 	async function callApp(app, config, method, apiPath, body) {
@@ -246,17 +220,6 @@ export function createServer({ jellyfinUrl, configDir }) {
 			.split("/")
 			.filter(Boolean);
 		const method = request.method ?? "GET";
-
-		const token = request.headers["x-emby-token"];
-		if (typeof token !== "string" || !token) {
-			throw new HttpFailure(401, "Sign in to Fancyfin first.");
-		}
-		if (!(await isAdmin(token))) {
-			throw new HttpFailure(
-				403,
-				"Only Jellyfin administrators can use Radarr and Sonarr here.",
-			);
-		}
 
 		// GET /arr/status
 		if (parts.length === 1 && parts[0] === "status" && method === "GET") {
@@ -394,19 +357,12 @@ if (
 	process.argv[1] &&
 	import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-	const jellyfinUrl = process.env.JELLYFIN_URL ?? "";
-	if (!jellyfinUrl) {
-		console.log(
-			"fancyfin: JELLYFIN_URL not set; the Radarr/Sonarr settings service is off",
-		);
-		process.exit(0);
-	}
 	const flag = process.argv.find((arg) => arg.startsWith("--config-dir="));
 	const configDir = flag
 		? flag.slice("--config-dir=".length)
 		: process.env.CONFIG_DIR || "/config";
 	const port = Number(process.env.ARR_PORT) || 8283;
-	createServer({ jellyfinUrl, configDir }).listen(port, "127.0.0.1", () => {
+	createServer({ configDir }).listen(port, "127.0.0.1", () => {
 		const { persistent } = configLocation(configDir);
 		console.log(
 			`fancyfin: settings service on 127.0.0.1:${port}, saving to ${configDir}${persistent ? "" : " (not a mounted folder: settings will be lost when the container is replaced)"}`,

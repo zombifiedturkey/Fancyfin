@@ -57,13 +57,13 @@ The key stays on the server: the browser only talks to `/tmdb` on your Fancyfin 
 
 ### Add to Radarr and Sonarr
 
-Titles you don't have can be sent straight to [Radarr](https://radarr.video/) (movies) or [Sonarr](https://sonarr.tv/) (TV) so they get collected. Only **Jellyfin administrators** see any of it: the Add buttons on "Not in your library" banner slides, the **Discover** row on Home, and the "Not in your library" group in search results (all of which need TMDB, above).
+Titles you don't have can be sent straight to [Radarr](https://radarr.video/) (movies) or [Sonarr](https://sonarr.tv/) (TV) so they get collected. The Add buttons appear on "Not in your library" banner slides, in the **Discover** row on Home and in the "Not in your library" group in search results (all of which need TMDB, above), but only once the app is connected and working in Settings.
 
-1. Sign in as a Jellyfin administrator and open **Settings, Radarr and Sonarr**.
-2. **Connect** each app: its address as the Fancyfin container can reach it (e.g. `http://192.168.1.20:7878`, with the URL base if you set one) and its API key (Radarr or Sonarr, **Settings, General**). Fancyfin checks the connection before saving, and shows the version and library size once connected.
+1. Open **Settings, Radarr and Sonarr**.
+2. **Connect** each app: its address as the Fancyfin container can reach it (e.g. `http://192.168.1.20:7878`, with the URL base if you set one) and its API key (Radarr or Sonarr, **Settings, General**). Fancyfin tests the connection before saving, and shows the version and library size once connected. Until a connection is saved and working, no Add buttons show.
 3. Click **Add to Radarr / Sonarr**. A window lets you pick the match (if it guessed wrong), root folder (with free space), quality profile, minimum availability (movies) or monitoring and series type (shows), and whether to start searching straight away. Tick **One-click add** (in Settings, or **Next time, skip this window** in the window) to add in one click with your last settings.
 
-How it works: a small service inside the container keeps the address and key in `/config` and talks to Radarr and Sonarr for you. The keys are never sent to the browser, only the few calls the Add window needs are allowed, and every call is checked against Jellyfin first, so it needs `JELLYFIN_URL` set. **Map a path to `/config`** (the Unraid template does) or the connections are forgotten when the container is replaced. Works with Radarr v5 and Sonarr v4. For `pnpm dev`, run `pnpm dev:server` in a second terminal.
+How it works: a small service inside the container keeps the address and key in `/config` and talks to Radarr and Sonarr for you. The keys are never sent to the browser, and only the few calls the Add window needs are allowed. There is no separate permission check: anyone who can open your Fancyfin can use the buttons and change the connection, so keep Fancyfin on your own network. **Map a path to `/config`** (the Unraid template does) or the connection is forgotten when the container is replaced. Works with Radarr v5 and Sonarr v4. For `pnpm dev`, run `pnpm dev:server` in a second terminal.
 
 ### Settings
 
