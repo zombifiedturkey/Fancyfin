@@ -7,10 +7,12 @@ export function Modal({
 	title,
 	onClose,
 	children,
+	size = "md",
 }: {
 	title: string;
 	onClose: () => void;
 	children: ReactNode;
+	size?: "md" | "lg";
 }) {
 	const reduceMotion = useReducedMotion();
 
@@ -41,7 +43,7 @@ export function Modal({
 				role="dialog"
 				aria-modal="true"
 				aria-label={title}
-				className="relative flex max-h-[85dvh] w-full max-w-2xl flex-col overflow-hidden rounded-[24px] border border-white/15 bg-[rgb(16_18_28/0.7)] shadow-[0_40px_120px_-20px_rgb(0_0_0/0.8),inset_0_1px_0_rgb(255_255_255/0.2)] backdrop-blur-[44px] backdrop-saturate-[1.8]"
+				className={`relative flex max-h-[85dvh] w-full ${size === "lg" ? "max-w-4xl" : "max-w-2xl"} flex-col overflow-hidden rounded-[24px] border border-white/15 bg-[rgb(16_18_28/0.7)] shadow-[0_40px_120px_-20px_rgb(0_0_0/0.8),inset_0_1px_0_rgb(255_255_255/0.2)] backdrop-blur-[44px] backdrop-saturate-[1.8]`}
 				initial={{ opacity: 0, scale: 0.97, y: 10 }}
 				animate={{ opacity: 1, scale: 1, y: 0 }}
 				transition={{

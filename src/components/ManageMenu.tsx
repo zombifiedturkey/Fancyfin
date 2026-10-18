@@ -2,7 +2,9 @@ import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models/base
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useIsAdmin, useRefreshItem } from "../lib/admin-queries";
+import { EditDetailsDialog } from "./EditDetailsDialog";
 import { IdentifyDialog } from "./IdentifyDialog";
+import { ImageDialog } from "./ImageDialog";
 
 const menuItem =
 	"block w-full cursor-pointer rounded-lg px-3 py-2 text-left text-sm text-ink transition-colors hover:bg-glass-strong disabled:cursor-wait disabled:opacity-60";
@@ -19,6 +21,8 @@ export function ManageMenu({
 	const refresh = useRefreshItem(itemId);
 	const [open, setOpen] = useState(false);
 	const [identifying, setIdentifying] = useState(false);
+	const [editing, setEditing] = useState(false);
+	const [artwork, setArtwork] = useState(false);
 	const root = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
@@ -56,6 +60,26 @@ export function ManageMenu({
 						transition={{ duration: 0.15 }}
 						className="absolute left-0 top-full z-30 mt-2 w-60 rounded-card border border-white/15 bg-[rgb(16_18_28/0.8)] p-2 shadow-card backdrop-blur-2xl"
 					>
+						<button
+							type="button"
+							className={menuItem}
+							onClick={() => {
+								setOpen(false);
+								setEditing(true);
+							}}
+						>
+							Edit details…
+						</button>
+						<button
+							type="button"
+							className={menuItem}
+							onClick={() => {
+								setOpen(false);
+								setArtwork(true);
+							}}
+						>
+							Artwork…
+						</button>
 						{canIdentify && (
 							<button
 								type="button"
@@ -93,6 +117,10 @@ export function ManageMenu({
 				</p>
 			)}
 
+			{editing && (
+				<EditDetailsDialog item={item} onClose={() => setEditing(false)} />
+			)}
+			{artwork && <ImageDialog item={item} onClose={() => setArtwork(false)} />}
 			{identifying && (
 				<IdentifyDialog item={item} onClose={() => setIdentifying(false)} />
 			)}
