@@ -281,6 +281,11 @@ export function connectionDetail(
 }
 
 /** Read the quality profiles. */
+/** True when Radarr's or Sonarr's answer to a lookup of one title lists it (any rows at all). */
+export function isInLibrary(json: unknown): boolean {
+	return Array.isArray(json) && json.length > 0;
+}
+
 export function parseProfiles(json: unknown): QualityProfile[] {
 	if (!Array.isArray(json)) return [];
 	return json.flatMap((row): QualityProfile[] => {

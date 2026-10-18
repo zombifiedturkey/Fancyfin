@@ -53,12 +53,20 @@ export function validKey(key) {
 
 /**
  * Is this call one the Add dialog needs? `sub` is what follows /arr/<app>/, for example
- * "api/v3/qualityprofile". Everything else is refused.
+ * "api/v3/qualityprofile". `search` is the query string. Everything else is refused.
+ * Looking one title up in the library (movie?tmdbId=, series?tvdbId=) is fine; listing the whole
+ * library is not.
  */
-export function allowedCall(app, method, sub) {
+export function allowedCall(app, method, sub, search = "") {
 	const kind = APPS[app]?.kind;
 	if (!kind) return false;
 	if (method === "GET") {
+		if (sub === `api/v3/${kind}`) {
+			const params = new URLSearchParams(search);
+			return /^\d+$/.test(
+				params.get(kind === "movie" ? "tmdbId" : "tvdbId") ?? "",
+			);
+		}
 		return [
 			"api/v3/qualityprofile",
 			"api/v3/rootfolder",
@@ -414,7 +422,7 @@ export function createServer({ configDir, tmdbBase = TMDB_BASE }) {
 
 		// /arr/<app>/api/v3/...  passed on to the app, for the few calls the Add dialog makes
 		const sub = parts.slice(1).join("/");
-		if (!allowedCall(app, method, sub))
+		if (!allowedCall(app, method, sub, url.search))
 			throw new HttpFailure(404, "Not found.");
 
 		const config = (await readConfig(file))[app];

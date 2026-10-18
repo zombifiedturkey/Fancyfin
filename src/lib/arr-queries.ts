@@ -15,6 +15,7 @@ import {
 	buildAddBody,
 	type Candidate,
 	type Choices,
+	isInLibrary,
 	mergeCandidates,
 	parseArrStatus,
 	parseCandidates,
@@ -219,16 +220,40 @@ export function candidatesQuery(app: ArrApp, title: TmdbTitle) {
 const addedKey = (title: TmdbTitle) =>
 	["arr", "added", title.kind, title.id] as const;
 
-/** True once this title has been added during this visit, so its button can say so. */
-export function useArrAdded(title: TmdbTitle): boolean {
-	const { data } = useQuery({
+/** Ask Radarr or Sonarr whether it already has this title. */
+async function checkInArr(
+	title: TmdbTitle,
+	signal?: AbortSignal,
+): Promise<boolean> {
+	if (title.kind === "movie") {
+		return isInLibrary(
+			await arrRequest("radarr", `movie?tmdbId=${title.id}`, { signal }),
+		);
+	}
+	// Sonarr knows shows by their TVDB id.
+	const tvdbId = await fetchTvdbId(title.id, signal);
+	if (!tvdbId) return false;
+	return isInLibrary(
+		await arrRequest("sonarr", `series?tvdbId=${tvdbId}`, { signal }),
+	);
+}
+
+/**
+ * Whether the app already has this title: "already" if it was there before, "added" if it was added
+ * during this visit, otherwise false. Asks Radarr or Sonarr, so it is right even for titles added
+ * some other way. Stays false while it checks, or if the app can't be asked.
+ */
+export function useArrAdded(title: TmdbTitle): "already" | "added" | false {
+	const { data } = useQuery<"already" | "added" | false>({
 		queryKey: addedKey(title),
-		queryFn: () => false,
-		initialData: false,
-		staleTime: Number.POSITIVE_INFINITY,
-		gcTime: Number.POSITIVE_INFINITY,
+		queryFn: async ({ signal }) =>
+			(await checkInArr(title, signal)) ? "already" : false,
+		// What we just added is certain; anything else is worth asking again after a minute.
+		staleTime: (query) =>
+			query.state.data === "added" ? Number.POSITIVE_INFINITY : 60_000,
+		retry: false,
 	});
-	return data;
+	return data ?? false;
 }
 
 async function postAdd(app: ArrApp, candidate: Candidate, choices: Choices) {
@@ -245,7 +270,7 @@ export function useAddToArr(title: TmdbTitle) {
 	return useMutation({
 		mutationFn: (input: { candidate: Candidate; choices: Choices }) =>
 			postAdd(app, input.candidate, input.choices),
-		onSuccess: () => queryClient.setQueryData(addedKey(title), true),
+		onSuccess: () => queryClient.setQueryData(addedKey(title), "added"),
 	});
 }
 
@@ -268,7 +293,7 @@ export async function quickAdd(
 		throw new Error(`${ARR_LABEL[app]} didn't return an exact match.`);
 	}
 	if (candidate.existingId) {
-		queryClient.setQueryData(addedKey(title), true);
+		queryClient.setQueryData(addedKey(title), "already");
 		return;
 	}
 	const choices = resolveChoices(options, getArrPrefs()[app], candidate);
@@ -278,7 +303,7 @@ export async function quickAdd(
 		);
 	}
 	await postAdd(app, candidate, choices);
-	queryClient.setQueryData(addedKey(title), true);
+	queryClient.setQueryData(addedKey(title), "added");
 }
 
 /** What to tell the person when something in this file failed. */

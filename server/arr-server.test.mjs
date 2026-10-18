@@ -75,6 +75,10 @@ describe("helpers", () => {
 		expect(allowedCall("sonarr", "POST", "api/v3/series")).toBe(true);
 		expect(allowedCall("sonarr", "GET", "api/v3/series/lookup")).toBe(true);
 		expect(allowedCall("radarr", "GET", "api/v3/movie")).toBe(false);
+		expect(allowedCall("radarr", "GET", "api/v3/movie", "?tmdbId=550")).toBe(true);
+		expect(allowedCall("radarr", "GET", "api/v3/movie", "?tmdbId=abc")).toBe(false);
+		expect(allowedCall("sonarr", "GET", "api/v3/series", "?tvdbId=81189")).toBe(true);
+		expect(allowedCall("sonarr", "GET", "api/v3/series", "?tmdbId=5")).toBe(false);
 		expect(allowedCall("radarr", "DELETE", "api/v3/movie")).toBe(false);
 		expect(allowedCall("radarr", "GET", "api/v3/system/status")).toBe(false);
 		expect(allowedCall("radarr", "POST", "api/v3/series")).toBe(false);

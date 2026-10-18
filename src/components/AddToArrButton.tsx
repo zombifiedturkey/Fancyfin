@@ -18,10 +18,11 @@ const styles = {
 	card: "glass flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-glass-strong disabled:cursor-default disabled:opacity-70",
 } as const;
 
+/** A green box with a tick: the title is already in Radarr or Sonarr. */
 const addedStyles = {
-	hero: "glass flex items-center gap-2 rounded-pill px-6 py-3 text-sm font-semibold text-ink",
-	row: "glass flex shrink-0 items-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-semibold text-success",
-	card: "glass flex w-full items-center justify-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-semibold text-success",
+	hero: "flex items-center gap-2 rounded-pill border border-success/50 bg-success/20 px-6 py-3 text-sm font-semibold text-success backdrop-blur-md",
+	row: "flex shrink-0 items-center gap-1.5 rounded-pill border border-success/50 bg-success/20 px-3 py-1.5 text-xs font-semibold text-success backdrop-blur-md",
+	card: "flex w-full items-center justify-center gap-1.5 rounded-pill border border-success/50 bg-success/20 px-3 py-1.5 text-xs font-semibold text-success backdrop-blur-md",
 } as const;
 
 type AddToArrButtonProps = {
@@ -70,7 +71,7 @@ function AddButton({ title, variant, onDialogChange }: AddToArrButtonProps) {
 		return (
 			<span className={addedStyles[variant]}>
 				<Icon kind="check" />
-				Added to {label}
+				{added === "added" ? `Added to ${label}` : `Already in ${label}`}
 			</span>
 		);
 	}

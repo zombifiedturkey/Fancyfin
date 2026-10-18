@@ -8,6 +8,7 @@ import {
 	connectionDetail,
 	folderLabel,
 	formatBytes,
+	isInLibrary,
 	mergeCandidates,
 	metaLine,
 	parseArrStatus,
@@ -382,5 +383,14 @@ describe("connection status", () => {
 			}),
 		).toBe("v4.0.10.2544 · 136 series");
 		expect(connectionDetail("sonarr", { configured: true })).toBe("");
+	});
+});
+
+describe("isInLibrary", () => {
+	it("is true only when the app lists the title", () => {
+		expect(isInLibrary([{ id: 3 }])).toBe(true);
+		expect(isInLibrary([])).toBe(false);
+		expect(isInLibrary({ message: "no" })).toBe(false);
+		expect(isInLibrary(null)).toBe(false);
 	});
 });
