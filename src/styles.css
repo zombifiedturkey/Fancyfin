@@ -82,8 +82,8 @@
 	.glass {
 		background: var(--color-glass);
 		border: 1px solid var(--color-glass-border);
-		backdrop-filter: blur(24px) saturate(160%);
-		-webkit-backdrop-filter: blur(24px) saturate(160%);
+		/* Tailwind's own blur utilities. A hand-written backdrop-filter was dropped from the production build. */
+		@apply backdrop-blur-[24px] backdrop-saturate-[1.6];
 	}
 
 	.page-gutter {
