@@ -20,7 +20,7 @@ The working to-do list. `PLAN.md` holds the original goals and milestones; this 
 - [x] Obvious switch on the banner to hide titles you don't own (also in Settings).
 - [x] Source setting: Popular / Popular + recent / Recently added.
 - [ ] Try it with a real key on Unraid.
-- [ ] Possible: genre pages using TMDB's genre charts (they use recently added for now).
+- [x] Genre pages use TMDB's most popular titles in that genre (matched to the library, same hide switch).
 
 ### 2. Add to Radarr and Sonarr (built, needs testing)
 

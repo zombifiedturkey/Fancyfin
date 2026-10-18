@@ -18,7 +18,10 @@ import type { LibraryKind } from "./library";
 import { fetchRecentFeatured } from "./queries";
 import { useSettings } from "./settings";
 import {
+	fetchGenres,
+	fetchPopularInGenres,
 	fetchTrending,
+	matchGenreIds,
 	type TmdbKind,
 	type TmdbTitle,
 	useRuntimeConfig,
@@ -118,17 +121,47 @@ export async function loadIndexes(
 	return indexes;
 }
 
-/** This week's popular titles from TMDB, each paired with the library's copy when there is one. */
+/** The most popular titles in a genre, one list per kind. A genre TMDB has no match for gives []. */
+function loadGenrePopular(
+	queryClient: QueryClient,
+	kinds: TmdbKind[],
+	genre: string,
+): Promise<TmdbTitle[][]> {
+	return Promise.all(
+		kinds.map(async (tmdbKind) => {
+			const genres = await queryClient.fetchQuery({
+				queryKey: ["tmdb", "genres", tmdbKind],
+				staleTime: 24 * 60 * 60_000,
+				queryFn: ({ signal: s }) => fetchGenres(tmdbKind, s),
+			});
+			const ids = matchGenreIds(genre, genres);
+			if (ids.length === 0) return [];
+			return queryClient.fetchQuery({
+				queryKey: ["tmdb", "genre-popular", tmdbKind, ids.join(",")],
+				staleTime: 30 * 60_000,
+				queryFn: ({ signal: s }) => fetchPopularInGenres(tmdbKind, ids, s),
+			});
+		}),
+	);
+}
+
+/**
+ * Popular titles from TMDB, each paired with the library's copy when there is one: this week's
+ * trending, or, with a genre, the most popular in that genre.
+ */
 async function fetchPopular(
 	queryClient: QueryClient,
 	userId: string,
 	kind: LibraryKind | undefined,
+	genre: string | undefined,
 	signal?: AbortSignal,
 ): Promise<PopularMatch[]> {
 	const kinds: TmdbKind[] =
 		kind === "movies" ? ["movie"] : kind === "shows" ? ["tv"] : ["movie", "tv"];
 
-	const lists = await loadTrending(queryClient, kinds);
+	const lists = genre
+		? await loadGenrePopular(queryClient, kinds, genre)
+		: await loadTrending(queryClient, kinds);
 	const titles: TmdbTitle[] = (
 		lists.length === 2
 			? interleave(lists[0] ?? [], lists[1] ?? [])
@@ -154,7 +187,8 @@ async function fetchPopular(
 
 /**
  * The slides for the featured banner, following the viewer's settings: recently added, popular
- * (from TMDB, if the server has a key), or both. Genre pages always use recently added.
+ * (from TMDB, if the server has a key), or both. On a genre page, "popular" means the most popular
+ * titles in that genre, whether or not the library has them.
  */
 export function useFeatured(
 	options: { kind?: LibraryKind; genre?: string } = {},
@@ -166,7 +200,7 @@ export function useFeatured(
 	const { kind, genre } = options;
 
 	const tmdbOn = config.data?.tmdb ?? false;
-	const source = tmdbOn && !genre ? settings.featuredSource : "recent";
+	const source = tmdbOn ? settings.featuredSource : "recent";
 	const discover = settings.featuredDiscover;
 
 	return useQuery({
@@ -186,7 +220,7 @@ export function useFeatured(
 			let popular: PopularMatch[] = [];
 			if (source !== "recent") {
 				try {
-					popular = await fetchPopular(queryClient, userId, kind, signal);
+					popular = await fetchPopular(queryClient, userId, kind, genre, signal);
 				} catch {
 					// TMDB unreachable or the key was refused: fall back to recently added.
 				}

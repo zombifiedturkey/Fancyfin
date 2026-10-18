@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+	matchGenreIds,
+	parseGenres,
 	parseSearch,
 	parseTrending,
 	parseTvdbId,
@@ -125,5 +127,46 @@ describe("parseSearch", () => {
 		expect(titles[0]?.poster).toBe("/d.jpg");
 		expect(titles[1]?.poster).toBeUndefined();
 		expect(parseSearch(null)).toEqual([]);
+	});
+});
+
+describe("genres", () => {
+	const movie = parseGenres({
+		genres: [
+			{ id: 28, name: "Action" },
+			{ id: 878, name: "Science Fiction" },
+			{ id: 99, name: "Documentary" },
+			{ bad: true },
+		],
+	});
+	const tv = parseGenres({
+		genres: [
+			{ id: 10759, name: "Action & Adventure" },
+			{ id: 10765, name: "Sci-Fi & Fantasy" },
+			{ id: 35, name: "Comedy" },
+		],
+	});
+
+	it("reads TMDB's list", () => {
+		expect(movie).toHaveLength(3);
+		expect(parseGenres(null)).toEqual([]);
+	});
+
+	it("matches names exactly, ignoring case", () => {
+		expect(matchGenreIds("action", movie)).toEqual([28]);
+		expect(matchGenreIds("Comedy", tv)).toEqual([35]);
+	});
+
+	it("matches either half of TMDB's combined TV genres", () => {
+		expect(matchGenreIds("Action", tv)).toEqual([10759]);
+		expect(matchGenreIds("Adventure", tv)).toEqual([10759]);
+		expect(matchGenreIds("Fantasy", tv)).toEqual([10765]);
+		expect(matchGenreIds("Science Fiction", tv)).toEqual([10765]);
+		expect(matchGenreIds("Sci-Fi", movie)).toEqual([878]);
+	});
+
+	it("gives nothing for a genre TMDB doesn't have", () => {
+		expect(matchGenreIds("Anime", movie)).toEqual([]);
+		expect(matchGenreIds("", movie)).toEqual([]);
 	});
 });

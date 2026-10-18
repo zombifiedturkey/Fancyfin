@@ -145,6 +145,73 @@ export async function fetchTrending(
 	return parseTrending(kind, await response.json());
 }
 
+/** A TMDB genre, like { id: 28, name: "Action" }. */
+export type TmdbGenre = { id: number; name: string };
+
+export function parseGenres(json: unknown): TmdbGenre[] {
+	const genres = (json as { genres?: unknown } | null)?.genres;
+	if (!Array.isArray(genres)) return [];
+	return genres.flatMap((raw): TmdbGenre[] => {
+		const row = raw as { id?: unknown; name?: unknown } | null;
+		return typeof row?.id === "number" && typeof row.name === "string"
+			? [{ id: row.id, name: row.name }]
+			: [];
+	});
+}
+
+/** Lower-case, with the spellings Jellyfin and TMDB differ on made the same. */
+function genreWord(name: string): string {
+	const word = name.trim().toLowerCase();
+	return word === "sci-fi" || word === "scifi" ? "science fiction" : word;
+}
+
+/**
+ * The TMDB genres that match a Jellyfin genre name. Jellyfin has "Action" and "Science Fiction";
+ * TMDB's TV list has combined ones like "Action & Adventure" and "Sci-Fi & Fantasy", which match
+ * either half.
+ */
+export function matchGenreIds(name: string, genres: TmdbGenre[]): number[] {
+	const wanted = genreWord(name);
+	if (!wanted) return [];
+	const exact = genres.filter((genre) => genreWord(genre.name) === wanted);
+	if (exact.length > 0) return exact.map((genre) => genre.id);
+	return genres
+		.filter((genre) =>
+			genre.name.split("&").some((part) => genreWord(part) === wanted),
+		)
+		.map((genre) => genre.id);
+}
+
+/** TMDB's genre list for movies or shows. */
+export async function fetchGenres(
+	kind: TmdbKind,
+	signal?: AbortSignal,
+): Promise<TmdbGenre[]> {
+	const response = await fetch(`/tmdb/genre/${kind}/list?language=en-US`, {
+		signal,
+	});
+	if (!response.ok) throw new Error(`TMDB ${response.status}`);
+	return parseGenres(await response.json());
+}
+
+/** The most popular titles in one or more genres (any of them), most popular first. */
+export async function fetchPopularInGenres(
+	kind: TmdbKind,
+	genreIds: number[],
+	signal?: AbortSignal,
+): Promise<TmdbTitle[]> {
+	const params = new URLSearchParams({
+		with_genres: genreIds.join("|"),
+		sort_by: "popularity.desc",
+		"vote_count.gte": "50",
+		include_adult: "false",
+		language: "en-US",
+	});
+	const response = await fetch(`/tmdb/discover/${kind}?${params}`, { signal });
+	if (!response.ok) throw new Error(`TMDB ${response.status}`);
+	return parseTrending(kind, await response.json());
+}
+
 /** What the server told us at start-up (shared with the login screen). */
 export function useRuntimeConfig() {
 	return useQuery({

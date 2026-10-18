@@ -48,7 +48,7 @@ docker compose up --build         # then open http://localhost:8080
 
 ### Popular banner (TMDB)
 
-The featured banner on Home and the Movies and TV Shows pages can show what's popular right now, using [TMDB](https://www.themoviedb.org/). Popular titles you own are matched to your library and play as normal. Popular titles you don't own are shown for inspiration, with a "Not in your library" label and a link to TMDB; there is a switch on the banner (and in Settings) to hide them.
+The featured banner on Home and the Movies and TV Shows pages can show what's popular right now, using [TMDB](https://www.themoviedb.org/). Popular titles you own are matched to your library and play as normal. Popular titles you don't own are shown for inspiration, with a "Not in your library" label and a link to TMDB; there is a switch on the banner (and in Settings) to hide them. Pick a genre on Movies or TV Shows and the banner shows the most popular titles in that genre instead.
 
 1. Create a free TMDB account and copy your API key (or "API Read Access Token") from your account's API settings.
 2. Set it as `TMDB_API_KEY` on the container (or in `.env.local` for `pnpm dev`).
