@@ -11,7 +11,7 @@ import {
 import { createPortal } from "react-dom";
 import { useAssSubtitles } from "../lib/ass";
 import { episodeLabel } from "../lib/format";
-import { popOutSupported } from "../lib/pip";
+import { popOutSupported, videoPipSupported } from "../lib/pip";
 import { closePopOut, openPopOut, usePopOut } from "../lib/pip-window";
 import {
 	type PlaybackPlan,
@@ -113,7 +113,8 @@ export function Player({
 	});
 	const mountRef = useRef<HTMLDivElement>(null);
 	const popOut = usePopOut();
-	const canPopOut = popOutSupported();
+	const windowPopOut = popOutSupported();
+	const canPopOut = windowPopOut || videoPipSupported();
 
 	const [playing, setPlaying] = useState(false);
 	const [buffering, setBuffering] = useState(true);
@@ -261,6 +262,13 @@ export function Player({
 		const video = videoRef.current;
 		try {
 			if (document.fullscreenElement) await document.exitFullscreen();
+			if (!windowPopOut) {
+				// No floating page window here (for example on plain http://): use the browser's video-only pop-out.
+				if (document.pictureInPictureElement)
+					await document.exitPictureInPicture();
+				else await video?.requestPictureInPicture();
+				return;
+			}
 			await openPopOut(video?.videoWidth ?? 0, video?.videoHeight ?? 0);
 		} catch {
 			// The browser said no (or the click wasn't recent enough); stay in the page.
@@ -293,7 +301,7 @@ export function Player({
 			if (videoRef.current && !videoRef.current.paused)
 				setControlsVisible(false);
 		}, HIDE_AFTER_MS);
-	}, []);
+	}, [windowPopOut]);
 
 	// Move the player into the pop-out window, or back into the page.
 	useLayoutEffect(() => {
@@ -703,7 +711,11 @@ export function Player({
 							type="button"
 							aria-label={popOut ? "Return to tab" : "Pop out player"}
 							title={
-								popOut ? "Return to tab" : "Pop out: always on top, resizable"
+								popOut
+									? "Return to tab"
+									: windowPopOut
+										? "Pop out: always on top, resizable"
+										: "Pop out (video only)"
 							}
 							onClick={() => {
 								if (popOut) closePopOut();

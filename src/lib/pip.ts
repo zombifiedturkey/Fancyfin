@@ -27,6 +27,14 @@ export function popOutSupported(): boolean {
 	return typeof window !== "undefined" && Boolean(docPip());
 }
 
+/**
+ * The browser's own video picture-in-picture (video only, with its own fading controls). Unlike the
+ * window above it also works on plain http:// addresses, such as http://<unraid-ip>:8282.
+ */
+export function videoPipSupported(): boolean {
+	return typeof document !== "undefined" && document.pictureInPictureEnabled;
+}
+
 /** Window size that fits the video's shape, so there are no black bars to start with. */
 export function popOutSize(
 	videoWidth: number,
