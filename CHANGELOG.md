@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Pop-out player.** A new button in the player opens it in a small always-on-top window that you can resize and drag into a corner, handy while you play a game. The controls fade out when you aren't using them, and it keeps playing through episode changes. Works in Chrome and Edge. The window has the browser's own thin title bar, and the game needs to run windowed or borderless to stay underneath it.
+
 ## 0.1.0
 
 The first release.

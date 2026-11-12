@@ -1,9 +1,18 @@
 import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models/base-item-dto";
 import { useNavigate } from "@tanstack/react-router";
 import Hls from "hls.js";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react";
+import { createPortal } from "react-dom";
 import { useAssSubtitles } from "../lib/ass";
 import { episodeLabel } from "../lib/format";
+import { popOutSupported } from "../lib/pip";
+import { closePopOut, openPopOut, usePopOut } from "../lib/pip-window";
 import {
 	type PlaybackPlan,
 	reportProgress,
@@ -39,6 +48,8 @@ function clock(totalSeconds: number): string {
 
 const round =
 	"glass flex size-11 cursor-pointer items-center justify-center rounded-full text-ink transition-colors hover:bg-glass-strong";
+const roundSmall =
+	"glass flex size-9 cursor-pointer items-center justify-center rounded-full text-ink transition-colors hover:bg-glass-strong";
 
 function Icon({ children }: { children: React.ReactNode }) {
 	return (
@@ -93,6 +104,16 @@ export function Player({
 	const tapTimer = useRef<number | undefined>(undefined);
 	const lastTap = useRef<number | null>(null);
 	const lastWasTouch = useRef(false);
+
+	// The player lives in a host element that moves between this page and the pop-out window.
+	const [host] = useState(() => {
+		const el = document.createElement("div");
+		el.style.display = "contents";
+		return el;
+	});
+	const mountRef = useRef<HTMLDivElement>(null);
+	const popOut = usePopOut();
+	const canPopOut = popOutSupported();
 
 	const [playing, setPlaying] = useState(false);
 	const [buffering, setBuffering] = useState(true);
@@ -231,9 +252,27 @@ export function Player({
 	}, []);
 
 	const toggleFullscreen = useCallback(() => {
+		if (popOut) return;
 		if (document.fullscreenElement) void document.exitFullscreen();
 		else void containerRef.current?.requestFullscreen?.();
+	}, [popOut]);
+
+	const startPopOut = useCallback(async () => {
+		const video = videoRef.current;
+		try {
+			if (document.fullscreenElement) await document.exitFullscreen();
+			await openPopOut(video?.videoWidth ?? 0, video?.videoHeight ?? 0);
+		} catch {
+			// The browser said no (or the click wasn't recent enough); stay in the page.
+		}
 	}, []);
+
+	// When this Player goes away, take its host with it. The window itself stays open (see Watch).
+	useLayoutEffect(() => {
+		return () => {
+			host.remove();
+		};
+	}, [host]);
 
 	const toggleMute = useCallback(() => {
 		const video = videoRef.current;
@@ -255,6 +294,19 @@ export function Player({
 				setControlsVisible(false);
 		}, HIDE_AFTER_MS);
 	}, []);
+
+	// Move the player into the pop-out window, or back into the page.
+	useLayoutEffect(() => {
+		const target = popOut ? popOut.document.body : mountRef.current;
+		if (!target || host.parentNode === target) return;
+		const video = videoRef.current;
+		const wasPlaying = Boolean(video && !video.paused);
+		target.append(host);
+		// Moving a video between windows can pause it; carry on if it was playing.
+		if (video && wasPlaying && video.paused)
+			void video.play().catch(() => undefined);
+		poke();
+	}, [popOut, host, poke]);
 
 	useEffect(() => {
 		const onFullscreen = () =>
@@ -314,9 +366,18 @@ export function Player({
 			}
 			poke();
 		};
-		window.addEventListener("keydown", onKey);
-		return () => window.removeEventListener("keydown", onKey);
-	}, [togglePlay, seekBy, changeVolume, toggleMute, toggleFullscreen, poke]);
+		const eventWindow = popOut ?? window;
+		eventWindow.addEventListener("keydown", onKey);
+		return () => eventWindow.removeEventListener("keydown", onKey);
+	}, [
+		togglePlay,
+		seekBy,
+		changeVolume,
+		toggleMute,
+		toggleFullscreen,
+		poke,
+		popOut,
+	]);
 
 	// Up-next countdown after the video ends.
 	const showNext = ended && nextEpisode && !cancelledNext;
@@ -370,13 +431,18 @@ export function Player({
 	const pct = duration > 0 ? (time / duration) * 100 : 0;
 	const bufPct = duration > 0 ? (bufferedEnd / duration) * 100 : 0;
 
-	return (
+	const btn = popOut ? roundSmall : round;
+
+	const content = (
 		<div
 			ref={containerRef}
 			role="application"
 			aria-label={`Playing ${title}`}
 			onMouseMove={poke}
-			className={`fixed inset-0 z-50 select-none bg-black ${visible ? "" : "cursor-none"}`}
+			onMouseLeave={() => {
+				if (popOut && playing) setControlsVisible(false);
+			}}
+			className={`@container fixed inset-0 z-50 select-none bg-black ${visible ? "" : "cursor-none"}`}
 		>
 			{/* biome-ignore lint/a11y/useMediaCaption: subtitles arrive in the next stage */}
 			<video
@@ -481,7 +547,7 @@ export function Player({
 
 			{/* Top bar */}
 			<div
-				className={`absolute inset-x-0 top-0 flex items-center gap-4 bg-linear-to-b from-black/70 to-transparent p-4 transition-opacity duration-300 sm:p-6 ${visible ? "opacity-100" : "pointer-events-none opacity-0"}`}
+				className={`absolute inset-x-0 top-0 flex items-center gap-4 bg-linear-to-b from-black/70 to-transparent p-4 transition-opacity duration-300 sm:p-6 ${popOut ? "hidden" : ""} ${visible ? "opacity-100" : "pointer-events-none opacity-0"}`}
 			>
 				<button
 					type="button"
@@ -506,7 +572,7 @@ export function Player({
 
 			{/* Bottom controls */}
 			<div
-				className={`absolute inset-x-0 bottom-0 bg-linear-to-t from-black/80 to-transparent p-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-16 transition-opacity duration-300 sm:p-6 sm:pt-20 ${visible ? "opacity-100" : "pointer-events-none opacity-0"}`}
+				className={`absolute inset-x-0 bottom-0 bg-linear-to-t from-black/80 to-transparent transition-opacity duration-300 ${popOut ? "p-3 pt-10" : "p-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-16 sm:p-6 sm:pt-20"} ${visible ? "opacity-100" : "pointer-events-none opacity-0"}`}
 			>
 				<div className="flex items-center gap-3">
 					<span className="w-14 text-right text-sm tabular-nums text-ink-muted">
@@ -547,7 +613,7 @@ export function Player({
 						type="button"
 						aria-label={playing ? "Pause" : "Play"}
 						onClick={togglePlay}
-						className={round}
+						className={btn}
 					>
 						<Icon>
 							{playing ? (
@@ -561,7 +627,7 @@ export function Player({
 						type="button"
 						aria-label="Back 10 seconds"
 						onClick={() => seekBy(-10)}
-						className={round}
+						className={`${btn} ${popOut ? "@max-md:hidden" : ""}`}
 					>
 						<span className="text-xs font-bold">−10</span>
 					</button>
@@ -569,7 +635,7 @@ export function Player({
 						type="button"
 						aria-label="Forward 10 seconds"
 						onClick={() => seekBy(10)}
-						className={round}
+						className={`${btn} ${popOut ? "@max-md:hidden" : ""}`}
 					>
 						<span className="text-xs font-bold">+10</span>
 					</button>
@@ -579,7 +645,7 @@ export function Player({
 							type="button"
 							aria-label={muted ? "Unmute" : "Mute"}
 							onClick={toggleMute}
-							className={round}
+							className={btn}
 						>
 							<Icon>
 								<path d="M4 9v6h4l5 4V5L8 9z" />
@@ -613,7 +679,7 @@ export function Player({
 						aria-label="Audio and subtitles"
 						aria-expanded={menuOpen}
 						onClick={() => setMenuOpen((open) => !open)}
-						className={`${round} ml-auto`}
+						className={`${btn} ml-auto`}
 					>
 						<Icon>
 							<rect
@@ -632,11 +698,42 @@ export function Player({
 							/>
 						</Icon>
 					</button>
+					{(canPopOut || popOut) && (
+						<button
+							type="button"
+							aria-label={popOut ? "Return to tab" : "Pop out player"}
+							title={
+								popOut ? "Return to tab" : "Pop out: always on top, resizable"
+							}
+							onClick={() => {
+								if (popOut) closePopOut();
+								else void startPopOut();
+							}}
+							className={btn}
+						>
+							<Icon>
+								<rect
+									x="3"
+									y="5"
+									width="18"
+									height="14"
+									rx="2.5"
+									fill="none"
+									strokeWidth="2"
+								/>
+								{popOut ? (
+									<path d="M8 15l4-4M8 11v4h4" fill="none" strokeWidth="2" />
+								) : (
+									<rect x="12" y="11" width="6" height="5" rx="1" />
+								)}
+							</Icon>
+						</button>
+					)}
 					<button
 						type="button"
 						aria-label={fullscreen ? "Exit full screen" : "Full screen"}
 						onClick={toggleFullscreen}
-						className={round}
+						className={`${btn} ${popOut ? "hidden" : ""}`}
 					>
 						<Icon>
 							{fullscreen ? (
@@ -722,5 +819,37 @@ export function Player({
 				</div>
 			)}
 		</div>
+	);
+
+	return (
+		<>
+			<div ref={mountRef} className="contents" />
+			{createPortal(content, host)}
+			{popOut && (
+				<div className="fixed inset-0 z-50 flex flex-col items-start justify-center gap-5 bg-black p-8 sm:p-16">
+					<p className="text-xs font-medium uppercase tracking-[0.2em] text-accent-strong">
+						Playing in a floating window
+					</p>
+					<p className="text-2xl font-semibold">{title}</p>
+					{subtitle && <p className="-mt-3 text-ink-muted">{subtitle}</p>}
+					<div className="flex gap-2">
+						<button
+							type="button"
+							onClick={closePopOut}
+							className="cursor-pointer rounded-pill bg-ink px-6 py-2 text-sm font-semibold text-canvas"
+						>
+							Return to this tab
+						</button>
+						<button
+							type="button"
+							onClick={onBack}
+							className="glass cursor-pointer rounded-pill px-6 py-2 text-sm font-semibold"
+						>
+							Stop and go back
+						</button>
+					</div>
+				</div>
+			)}
+		</>
 	);
 }

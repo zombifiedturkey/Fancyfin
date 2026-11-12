@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { RequireAuth } from "../auth/RequireAuth";
 import { Player } from "../components/Player";
 import { useItem } from "../lib/item-queries";
+import { closePopOut } from "../lib/pip-window";
 import { usePlaybackPlan } from "../lib/playback";
 import {
 	defaultSubtitleIndex,
@@ -77,6 +78,9 @@ function WatchInner() {
 		setLastSource(current.source);
 		if (subIndex === null) setSubIndex(defaultSubtitleIndex(current.source));
 	}, [current, subIndex]);
+
+	// Leaving the player closes the floating window too.
+	useEffect(() => closePopOut, []);
 
 	// Refresh Continue Watching and watched marks when leaving the player.
 	useEffect(() => {
