@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Next episode.** A next-episode button in the player controls, and an "Up next" card with the next episode's thumbnail and a play button that appears for the last 30 seconds (and at the end, with the countdown). It also shows in the pop-out window.
 - **Pop-out player.** A new button in the player opens it in a small always-on-top window that you can resize and drag into a corner, handy while you play a game. The controls fade out when you aren't using them, and it keeps playing through episode changes. Works in Chrome and Edge; on a plain `http://` address, where browsers don't allow the floating page window, it uses the browser's own video-only pop-out instead. The window has the browser's own thin title bar, and the game needs to run windowed or borderless to stay underneath it.
 
 ## 0.1.0

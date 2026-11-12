@@ -11,6 +11,7 @@ import {
 import { createPortal } from "react-dom";
 import { useAssSubtitles } from "../lib/ass";
 import { episodeLabel } from "../lib/format";
+import { posterImage } from "../lib/images";
 import { popOutSupported, videoPipSupported } from "../lib/pip";
 import { closePopOut, openPopOut, usePopOut } from "../lib/pip-window";
 import {
@@ -31,6 +32,7 @@ import {
 	useSilenceOtherTracks,
 	useVttTrack,
 } from "../lib/subtitles";
+import { upNextVisible } from "../lib/up-next";
 import { TrackMenu } from "./TrackMenu";
 
 const HIDE_AFTER_MS = 3000;
@@ -390,6 +392,20 @@ export function Player({
 	// Up-next countdown after the video ends.
 	const showNext = ended && nextEpisode && !cancelledNext;
 	const nextId = nextEpisode?.Id;
+	const nextThumb = nextEpisode ? posterImage(nextEpisode, 480) : undefined;
+	const showNextCard =
+		Boolean(nextEpisode) &&
+		!cancelledNext &&
+		upNextVisible(time, duration, ended);
+	const goNext = useCallback(() => {
+		if (!nextId) return;
+		void navigate({
+			to: "/watch/$id",
+			params: { id: nextId },
+			search: { start: 0 },
+			replace: true,
+		});
+	}, [nextId, navigate]);
 	useEffect(() => {
 		if (!showNext || !nextId) return;
 		setCountdown(NEXT_COUNTDOWN_S);
@@ -647,6 +663,19 @@ export function Player({
 					>
 						<span className="text-xs font-bold">+10</span>
 					</button>
+					{nextId && (
+						<button
+							type="button"
+							aria-label="Next episode"
+							title="Next episode"
+							onClick={goNext}
+							className={btn}
+						>
+							<Icon>
+								<path d="M6 6l8.5 6L6 18zM16 6h2v12h-2z" />
+							</Icon>
+						</button>
+					)}
 
 					<div className="group/vol flex items-center gap-2">
 						<button
@@ -797,35 +826,56 @@ export function Player({
 			)}
 
 			{/* Up next */}
-			{showNext && nextEpisode && (
-				<div className="glass absolute bottom-28 right-4 w-80 max-w-[calc(100%-2rem)] rounded-card p-5 sm:right-6">
-					<p className="text-xs font-medium uppercase tracking-[0.2em] text-accent-strong">
-						Up next · {countdown}s
-					</p>
-					<p className="mt-2 line-clamp-2 font-semibold">{nextEpisode.Name}</p>
-					<p className="text-sm text-ink-muted">{episodeLabel(nextEpisode)}</p>
-					<div className="mt-4 flex gap-2">
+			{showNextCard && nextEpisode && (
+				<div
+					className={`glass absolute flex overflow-hidden rounded-card ${
+						popOut
+							? "bottom-24 right-3 w-[min(22rem,calc(100%-1.5rem))] flex-row items-stretch"
+							: "bottom-28 right-4 w-80 max-w-[calc(100%-2rem)] flex-col sm:right-6"
+					}`}
+				>
+					<button
+						type="button"
+						onClick={goNext}
+						aria-label={`Play next episode: ${nextEpisode.Name ?? ""}`}
+						className={`group relative shrink-0 cursor-pointer overflow-hidden bg-black/40 ${
+							popOut ? "w-28" : "aspect-video w-full"
+						}`}
+					>
+						{nextThumb && (
+							<img
+								src={nextThumb}
+								alt=""
+								className="absolute inset-0 size-full object-cover transition-transform duration-300 group-hover:scale-105"
+							/>
+						)}
+						<span className="absolute inset-0 flex items-center justify-center bg-black/25">
+							<span className="glass flex size-11 items-center justify-center rounded-full text-ink transition-colors group-hover:bg-glass-strong">
+								<Icon>
+									<path d="M8 5v14l11-7z" />
+								</Icon>
+							</span>
+						</span>
+					</button>
+					<div className="relative min-w-0 flex-1 p-4 pr-10">
+						<p className="text-xs font-medium uppercase tracking-[0.2em] text-accent-strong">
+							Up next{ended ? ` · ${countdown}s` : ""}
+						</p>
+						<p className="mt-1 line-clamp-2 font-semibold">
+							{nextEpisode.Name}
+						</p>
+						<p className="text-sm text-ink-muted">
+							{episodeLabel(nextEpisode)}
+						</p>
 						<button
 							type="button"
-							onClick={() =>
-								nextId &&
-								void navigate({
-									to: "/watch/$id",
-									params: { id: nextId },
-									search: { start: 0 },
-									replace: true,
-								})
-							}
-							className="cursor-pointer rounded-pill bg-ink px-5 py-2 text-sm font-semibold text-canvas"
-						>
-							Play now
-						</button>
-						<button
-							type="button"
+							aria-label="Dismiss"
 							onClick={() => setCancelledNext(true)}
-							className="glass cursor-pointer rounded-pill px-5 py-2 text-sm font-semibold"
+							className="absolute right-2 top-2 flex size-7 cursor-pointer items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-white/10 hover:text-ink"
 						>
-							Cancel
+							<Icon>
+								<path d="M6 6l12 12M18 6L6 18" fill="none" strokeWidth="2" />
+							</Icon>
 						</button>
 					</div>
 				</div>
