@@ -3,6 +3,9 @@ package com.fancyfin.tv.ui
 import android.view.View
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -104,6 +107,7 @@ fun PlayerScreen(item: Item, client: JellyfinClient, onDone: () -> Unit) {
     var info by remember { mutableStateOf("") }
     var controlsVisible by remember { mutableStateOf(true) }
     var note by remember { mutableStateOf<String?>(null) }
+    var showInfo by remember { mutableStateOf(false) }
     val lastMs = remember(item.id) { longArrayOf(startMs) }
 
     val player = remember(item.id) {
@@ -184,6 +188,21 @@ fun PlayerScreen(item: Item, client: JellyfinClient, onDone: () -> Unit) {
         }
     }
 
+    // Show the stream info for a few seconds whenever the controls appear (or the stream changes), then fade it.
+    LaunchedEffect(info, controlsVisible) {
+        if (controlsVisible && info.isNotEmpty()) {
+            showInfo = true
+            delay(5_000)
+        }
+        showInfo = false
+    }
+    LaunchedEffect(note) {
+        if (note != null) {
+            delay(8_000)
+            note = null
+        }
+    }
+
     BackHandler { onDone() }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -211,7 +230,7 @@ fun PlayerScreen(item: Item, client: JellyfinClient, onDone: () -> Unit) {
         )
 
         // What the TV is actually being sent, shown with the controls so you can check HDR and Atmos.
-        if (controlsVisible && info.isNotEmpty()) {
+        AnimatedVisibility(visible = showInfo, enter = fadeIn(), exit = fadeOut()) {
             Column(
                 Modifier.padding(start = 48.dp, top = 32.dp)
                     .background(Color(0x99000000), RoundedCornerShape(8.dp))
