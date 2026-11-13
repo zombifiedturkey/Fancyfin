@@ -46,12 +46,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
-private fun Field(
+internal fun Field(
     label: String,
     value: String,
     onChange: (String) -> Unit,
     password: Boolean = false,
     keyboard: KeyboardType = KeyboardType.Text,
+    wide: Boolean = false,
 ) {
     val focus = LocalFocusManager.current
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -66,7 +67,7 @@ private fun Field(
             keyboardOptions = KeyboardOptions(keyboardType = keyboard, imeAction = ImeAction.Next),
             // The tick on the on-screen keyboard moves on to the next control instead of leaving focus stuck here.
             keyboardActions = KeyboardActions(onNext = { focus.moveFocus(FocusDirection.Down) }),
-            modifier = Modifier.width(320.dp).onPreviewKeyEvent { event ->
+            modifier = Modifier.width(if (wide) 480.dp else 320.dp).onPreviewKeyEvent { event ->
                 // A text field would otherwise swallow up and down on the remote.
                 if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) {
                     focus.moveFocus(FocusDirection.Down)
@@ -81,7 +82,7 @@ private fun Field(
             decorationBox = { inner ->
                 Box(
                     Modifier
-                        .width(320.dp)
+                        .width(if (wide) 480.dp else 320.dp)
                         .height(38.dp)
                         .background(Palette.GlassFill, RoundedCornerShape(8.dp))
                         .border(1.dp, Palette.GlassEdge, RoundedCornerShape(8.dp))

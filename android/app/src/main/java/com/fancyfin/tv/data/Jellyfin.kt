@@ -180,12 +180,19 @@ class JellyfinClient(private val prefs: Prefs) {
         return items(get("/Users/$userId/Items/Latest?Limit=20&Fields=$fields$parent$kinds"))
     }
 
-    suspend fun library(type: String, sort: String = "SortName", descending: Boolean = false, limit: Int = 300): List<Item> {
+    /** Every movie or show, sorted, with optional extra query such as "&Is4K=true". */
+    suspend fun library(
+        type: String,
+        sort: String = "SortName",
+        descending: Boolean = false,
+        extra: String = "",
+        limit: Int = 3000,
+    ): List<Item> {
         val order = if (descending) "Descending" else "Ascending"
         return items(
             get(
-                "/Users/$userId/Items?IncludeItemTypes=$type&Recursive=true&SortBy=$sort&SortOrder=$order" +
-                    "&Limit=$limit&Fields=$fields&EnableTotalRecordCount=false",
+                "/Users/$userId/Items?IncludeItemTypes=$type&Recursive=true&SortBy=$sort,SortName&SortOrder=$order" +
+                    "&Limit=$limit&Fields=$fields&EnableTotalRecordCount=false$extra",
             ),
         )
     }
@@ -196,7 +203,7 @@ class JellyfinClient(private val prefs: Prefs) {
     suspend fun search(query: String): List<Item> {
         val q = URLEncoder.encode(query, "UTF-8")
         return items(
-            get("/Users/$userId/Items?SearchTerm=$q&Recursive=true&IncludeItemTypes=Movie,Series,Episode&Limit=40&Fields=$fields"),
+            get("/Users/$userId/Items?SearchTerm=$q&Recursive=true&IncludeItemTypes=Movie,Series&Limit=60&Fields=$fields"),
         )
     }
 

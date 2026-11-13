@@ -38,7 +38,7 @@ import com.fancyfin.tv.data.JellyfinClient
 
 private class HomeRow(val title: String, val items: List<Item>, val landscape: Boolean)
 
-enum class Tab(val label: String) { Home("Home"), Movies("Movies"), Shows("TV Shows") }
+enum class Tab(val label: String) { Home("Home"), Movies("Movies"), Shows("TV Shows"), Search("Search") }
 
 /** The big picture behind everything, faded into black so text on top stays readable. */
 @Composable

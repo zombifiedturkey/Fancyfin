@@ -58,10 +58,10 @@ fun FancyfinApp() {
             val back: () -> Unit = { if (stack.size > 1) stack.removeAt(stack.lastIndex) }
 
             when (val route = stack.last()) {
-                is Route.Main -> if (route.tab == Tab.Home) {
-                    HomeScreen(client, open, goTab, signOut)
-                } else {
-                    LibraryScreen(route.tab, client, open, goTab, signOut)
+                is Route.Main -> when (route.tab) {
+                    Tab.Home -> HomeScreen(client, open, goTab, signOut)
+                    Tab.Search -> SearchScreen(client, open, goTab, signOut)
+                    else -> LibraryScreen(route.tab, client, open, goTab, signOut)
                 }
                 is Route.Detail -> DetailScreen(route.item, client, play, open)
                 is Route.Play -> PlayerScreen(route.item, client, back)
