@@ -32,6 +32,7 @@ import {
 	useSilenceOtherTracks,
 	useVttTrack,
 } from "../lib/subtitles";
+import { isTv } from "../lib/tv";
 import { upNextVisible } from "../lib/up-next";
 import { TrackMenu } from "./TrackMenu";
 
@@ -116,7 +117,7 @@ export function Player({
 	const mountRef = useRef<HTMLDivElement>(null);
 	const popOut = usePopOut();
 	const windowPopOut = popOutSupported();
-	const canPopOut = windowPopOut || videoPipSupported();
+	const canPopOut = !isTv() && (windowPopOut || videoPipSupported());
 
 	const [playing, setPlaying] = useState(false);
 	const [buffering, setBuffering] = useState(true);
