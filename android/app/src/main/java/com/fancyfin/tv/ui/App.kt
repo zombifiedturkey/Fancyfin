@@ -52,11 +52,11 @@ fun FancyfinApp() {
                 prefs.signOut()
                 signedIn = false
             }
-            val goTab = { tab: Tab ->
+            val goTab: (Tab) -> Unit = { tab ->
                 stack.clear()
                 stack.add(Route.Main(tab))
             }
-            val open = { item: Item -> stack.add(Route.Detail(item)) }
+            val open: (Item) -> Unit = { item -> stack.add(Route.Detail(item)) }
 
             when (val route = stack.last()) {
                 is Route.Main -> if (route.tab == Tab.Home) {
