@@ -263,5 +263,12 @@ class JellyfinClient(private val prefs: Prefs) {
         else -> backdrop(item, width) ?: poster(item, width)
     }
 
+    /** A transcoded stream, used only when the TV can't play the original file. */
+    fun transcodeUrl(id: String): String =
+        "$server/Videos/$id/main.m3u8?MediaSourceId=$id&DeviceId=${prefs.deviceId}" +
+            "&PlaySessionId=${java.util.UUID.randomUUID()}&VideoCodec=hevc,h264&AudioCodec=eac3,ac3,aac" +
+            "&TranscodingMaxAudioChannels=6&MaxStreamingBitrate=120000000&SegmentContainer=ts" +
+            "&BreakOnNonKeyFrames=True&api_key=$token"
+
     fun directStreamUrl(id: String): String = "$server/Videos/$id/stream?static=true&api_key=$token"
 }
