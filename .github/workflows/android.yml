@@ -8,10 +8,10 @@ name: Android TV app
 on:
   push:
     branches: [main]
-    paths: ["android/**", ".github/workflows/android.yml"]
+    paths: ["android/**", ".github/workflows/android.yml", ".github/scripts/gradle-annotate.sh"]
     tags: ["tv-v*"]
   pull_request:
-    paths: ["android/**", ".github/workflows/android.yml"]
+    paths: ["android/**", ".github/workflows/android.yml", ".github/scripts/gradle-annotate.sh"]
   workflow_dispatch:
 
 permissions:
@@ -43,7 +43,7 @@ jobs:
 
       - name: Debug build
         if: steps.version.outputs.release != 'true'
-        run: gradle -p android assembleDebug
+        run: .github/scripts/gradle-annotate.sh -p android assembleDebug
 
       - name: Load the signing key
         if: steps.version.outputs.release == 'true'
@@ -64,7 +64,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          gradle -p android assembleRelease -PversionName=${{ steps.version.outputs.version }}
+          .github/scripts/gradle-annotate.sh -p android assembleRelease -PversionName=${{ steps.version.outputs.version }}
           cp android/app/build/outputs/apk/release/app-release.apk fancyfin-tv.apk
 
       - name: Keep the debug build

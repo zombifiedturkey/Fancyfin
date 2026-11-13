@@ -14,7 +14,7 @@
         android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher"
         android:label="Fancyfin"
-        android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
+        android:theme="@style/Theme.Fancyfin"
         android:usesCleartextTraffic="true">
 
         <activity
