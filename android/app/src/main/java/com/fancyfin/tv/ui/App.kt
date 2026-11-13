@@ -4,8 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -14,8 +12,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.fancyfin.tv.data.Item
 import com.fancyfin.tv.data.JellyfinClient
 import com.fancyfin.tv.data.Prefs
@@ -24,6 +20,7 @@ import com.fancyfin.tv.data.Prefs
 private sealed class Route {
     data class Main(val tab: Tab) : Route()
     data class Detail(val item: Item) : Route()
+    data class Play(val item: Item) : Route()
 }
 
 /** The whole app. */
@@ -57,6 +54,8 @@ fun FancyfinApp() {
                 stack.add(Route.Main(tab))
             }
             val open: (Item) -> Unit = { item -> stack.add(Route.Detail(item)) }
+            val play: (Item) -> Unit = { item -> stack.add(Route.Play(item)) }
+            val back: () -> Unit = { if (stack.size > 1) stack.removeAt(stack.lastIndex) }
 
             when (val route = stack.last()) {
                 is Route.Main -> if (route.tab == Tab.Home) {
@@ -64,12 +63,8 @@ fun FancyfinApp() {
                 } else {
                     LibraryScreen(route.tab, client, open, goTab, signOut)
                 }
-                is Route.Detail -> Text(
-                    route.item.name + " (details coming next)",
-                    color = Palette.Text,
-                    fontSize = 20.sp,
-                    modifier = Modifier.padding(48.dp),
-                )
+                is Route.Detail -> DetailScreen(route.item, client, play, open)
+                is Route.Play -> PlayerScreen(route.item, client, back)
             }
         }
     }
