@@ -2,15 +2,18 @@ package com.fancyfin.tv.data
 
 import com.fancyfin.tv.BuildConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
-import java.net.DatagramPacket
-import java.net.DatagramSocket
 import java.net.HttpURLConnection
-import java.net.InetAddress
-import java.net.SocketTimeoutException
+import java.net.Inet4Address
+import java.net.NetworkInterface
 import java.net.URL
 import java.net.URLEncoder
 
@@ -18,7 +21,10 @@ class ApiException(message: String, val code: Int = 0) : IOException(message)
 
 /** Talks to a Jellyfin server over its REST API. All calls run off the main thread. */
 class JellyfinClient(private val prefs: Prefs) {
-    val server: String get() = prefs.server.orEmpty().trimEnd('/')
+    val fancyfin: String get() = prefs.fancyfin.orEmpty().trimEnd('/')
+
+    /** Jellyfin as the Fancyfin container proxies it. Images and streams come from here too. */
+    val server: String get() = if (fancyfin.isEmpty()) "" else "$fancyfin/api"
     val userId: String get() = prefs.userId.orEmpty()
     val token: String get() = prefs.token.orEmpty()
     val isSignedIn: Boolean get() = server.isNotEmpty() && token.isNotEmpty() && userId.isNotEmpty()
@@ -43,10 +49,10 @@ class JellyfinClient(private val prefs: Prefs) {
             connection.readTimeout = 20_000
             connection.setRequestProperty("Accept", "application/json")
             connection.setRequestProperty("Authorization", authHeader(withToken))
-            if (body != null) {
+            if (body != null || method == "POST") {
                 connection.doOutput = true
                 connection.setRequestProperty("Content-Type", "application/json")
-                connection.outputStream.use { it.write(body.toString().toByteArray()) }
+                connection.outputStream.use { it.write((body ?: JSONObject()).toString().toByteArray()) }
             }
             val code = connection.responseCode
             if (code !in 200..299) throw ApiException("HTTP $code", code)
@@ -62,49 +68,91 @@ class JellyfinClient(private val prefs: Prefs) {
         withContext(Dispatchers.IO) { request(server, path, method, body) }
     }
 
-    // ---- Sign in -----------------------------------------------------------------------------
+    // ---- Connecting and signing in -----------------------------------------------------------
 
-    /** Checks the address is a Jellyfin server and returns its name. */
-    suspend fun probe(address: String): String = withContext(Dispatchers.IO) {
-        val json = JSONObject(request(address, "/System/Info/Public", withToken = false))
-        json.optString("ServerName", "Jellyfin")
+    /** Checks the address is a Fancyfin container that is connected to Jellyfin. Returns the clean address. */
+    suspend fun checkFancyfin(address: String): String = withContext(Dispatchers.IO) {
+        val clean = address.trimEnd('/')
+        val json = JSONObject(request(clean, "/config.json", withToken = false))
+        if (!json.has("proxy")) throw ApiException("Not Fancyfin")
+        if (!json.optBoolean("proxy")) throw ApiException("Fancyfin has no Jellyfin address set")
+        clean
     }
 
-    suspend fun signIn(address: String, user: String, password: String) = withContext(Dispatchers.IO) {
-        val body = JSONObject().put("Username", user).put("Pw", password)
-        val json = JSONObject(request(address, "/Users/AuthenticateByName", "POST", body, withToken = false))
-        prefs.server = address.trimEnd('/')
+    private fun saveSession(fancyfin: String, json: JSONObject) {
+        prefs.fancyfin = fancyfin.trimEnd('/')
         prefs.token = json.getString("AccessToken")
         prefs.userId = json.getJSONObject("User").getString("Id")
         prefs.userName = json.getJSONObject("User").optString("Name")
     }
 
-    /** Servers on the local network answer this UDP broadcast. Returns addresses like http://192.168.1.5:8096. */
+    suspend fun signIn(fancyfin: String, user: String, password: String) = withContext(Dispatchers.IO) {
+        val body = JSONObject().put("Username", user).put("Pw", password)
+        val json = JSONObject(request("$fancyfin/api", "/Users/AuthenticateByName", "POST", body, withToken = false))
+        saveSession(fancyfin, json)
+    }
+
+    class QuickConnect(val code: String, val secret: String)
+
+    /** Starts Quick Connect. Throws with code 401 when it is switched off in Jellyfin. */
+    suspend fun quickConnectStart(fancyfin: String): QuickConnect = withContext(Dispatchers.IO) {
+        val json = JSONObject(request("$fancyfin/api", "/QuickConnect/Initiate", "POST", withToken = false))
+        QuickConnect(json.getString("Code"), json.getString("Secret"))
+    }
+
+    /** True once the code has been approved in another Jellyfin app. */
+    suspend fun quickConnectApproved(fancyfin: String, secret: String): Boolean = withContext(Dispatchers.IO) {
+        JSONObject(request("$fancyfin/api", "/QuickConnect/Connect?secret=$secret", withToken = false))
+            .optBoolean("Authenticated")
+    }
+
+    suspend fun quickConnectFinish(fancyfin: String, secret: String) = withContext(Dispatchers.IO) {
+        val body = JSONObject().put("Secret", secret)
+        val json = JSONObject(request("$fancyfin/api", "/Users/AuthenticateWithQuickConnect", "POST", body, withToken = false))
+        saveSession(fancyfin, json)
+    }
+
+    /** Looks for Fancyfin on this network: tries port 8282 on every address near this device's. */
     suspend fun discover(): List<String> = withContext(Dispatchers.IO) {
-        val found = LinkedHashSet<String>()
+        val prefixes = LinkedHashSet<String>()
         try {
-            DatagramSocket().use { socket ->
-                socket.broadcast = true
-                socket.soTimeout = 1_500
-                val message = "who is JellyfinServer?".toByteArray()
-                socket.send(DatagramPacket(message, message.size, InetAddress.getByName("255.255.255.255"), 7359))
-                val buffer = ByteArray(1024)
-                val deadline = System.currentTimeMillis() + 2_500
-                while (System.currentTimeMillis() < deadline) {
-                    try {
-                        val packet = DatagramPacket(buffer, buffer.size)
-                        socket.receive(packet)
-                        val reply = JSONObject(String(packet.data, 0, packet.length))
-                        reply.optString("Address").takeIf { it.isNotEmpty() }?.let { found.add(it) }
-                    } catch (e: SocketTimeoutException) {
-                        break
+            for (nic in NetworkInterface.getNetworkInterfaces()) {
+                if (nic.isLoopback || !nic.isUp) continue
+                for (addr in nic.inetAddresses) {
+                    if (addr is Inet4Address && addr.isSiteLocalAddress) {
+                        prefixes.add(addr.hostAddress!!.substringBeforeLast('.'))
                     }
                 }
             }
         } catch (e: Exception) {
-            // No network or broadcast blocked: the person can type the address instead.
+            return@withContext emptyList()
         }
-        found.toList()
+        val gate = Semaphore(64)
+        coroutineScope {
+            prefixes.flatMap { prefix -> (1..254).map { "$prefix.$it" } }.map { host ->
+                async {
+                    gate.withPermit {
+                        try {
+                            val connection = URL("http://$host:8282/config.json").openConnection() as HttpURLConnection
+                            connection.connectTimeout = 600
+                            connection.readTimeout = 800
+                            try {
+                                if (connection.responseCode == 200) {
+                                    val text = connection.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
+                                    if (JSONObject(text).has("proxy")) "http://$host:8282" else null
+                                } else {
+                                    null
+                                }
+                            } finally {
+                                connection.disconnect()
+                            }
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
+                }
+            }.awaitAll().filterNotNull()
+        }
     }
 
     // ---- Browsing ----------------------------------------------------------------------------

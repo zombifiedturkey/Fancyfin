@@ -31,7 +31,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.fancyfin.tv.data.ApiException
 import com.fancyfin.tv.data.JellyfinClient
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -68,18 +70,62 @@ private fun Field(
     }
 }
 
-/** First-run screen: find or type the Jellyfin address, then sign in. Everything is left-aligned. */
+private enum class Step { Connect, QuickConnect, Password }
+
+/**
+ * First-run screen. Step 1 finds the Fancyfin container (it is the only thing the TV needs to know),
+ * step 2 shows a Quick Connect code to approve from Jellyfin on a PC, and the password form is the
+ * fallback. Everything is left-aligned.
+ */
 @Composable
 fun SignInScreen(client: JellyfinClient, onSignedIn: () -> Unit) {
     val scope = rememberCoroutineScope()
-    var address by remember { mutableStateOf(client.server) }
+    var step by remember { mutableStateOf(Step.Connect) }
+    var address by remember { mutableStateOf(client.fancyfin) }
     var user by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var scanning by remember { mutableStateOf(true) }
     var found by remember { mutableStateOf<List<String>>(emptyList()) }
+    var code by remember { mutableStateOf<String?>(null) }
+    var attempt by remember { mutableStateOf(0) }
 
-    LaunchedEffect(Unit) { found = client.discover() }
+    LaunchedEffect(Unit) {
+        found = client.discover()
+        scanning = false
+        if (found.size == 1 && address.isEmpty()) address = found[0]
+    }
+
+    // Quick Connect: show a code, then wait for it to be approved.
+    LaunchedEffect(step, attempt) {
+        if (step != Step.QuickConnect) return@LaunchedEffect
+        code = null
+        message = null
+        try {
+            val qc = client.quickConnectStart(address)
+            code = qc.code
+            val deadline = System.currentTimeMillis() + 4 * 60_000
+            while (System.currentTimeMillis() < deadline) {
+                delay(3_000)
+                if (client.quickConnectApproved(address, qc.secret)) {
+                    client.quickConnectFinish(address, qc.secret)
+                    onSignedIn()
+                    return@LaunchedEffect
+                }
+            }
+            message = "That code ran out of time."
+            code = null
+        } catch (e: ApiException) {
+            message = if (e.code == 401) {
+                "Quick Connect is switched off in Jellyfin (Dashboard, General). Use a password instead."
+            } else {
+                "Quick Connect didn't work (${e.message})."
+            }
+        } catch (e: Exception) {
+            message = "Couldn't reach Fancyfin."
+        }
+    }
 
     Box(Modifier.fillMaxSize().background(Palette.Background)) {
         Column(
@@ -87,43 +133,99 @@ fun SignInScreen(client: JellyfinClient, onSignedIn: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text("Fancyfin", color = Palette.Text, fontSize = 34.sp, fontWeight = FontWeight.Bold)
-            Text("Sign in to your Jellyfin server", color = Palette.TextMuted, fontSize = 14.sp)
 
-            if (found.isNotEmpty()) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    found.forEach { GlassButton(it.removePrefix("http://"), { address = it }) }
+            when (step) {
+                Step.Connect -> {
+                    Text("Connect to your Fancyfin server", color = Palette.TextMuted, fontSize = 14.sp)
+                    when {
+                        scanning -> Text("Looking for Fancyfin on your network…", color = Palette.TextMuted, fontSize = 12.sp)
+                        found.isEmpty() -> Text("Couldn't find it automatically. Type the address.", color = Palette.TextMuted, fontSize = 12.sp)
+                        else -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            found.forEach { GlassButton(it.removePrefix("http://"), { address = it }) }
+                        }
+                    }
+                    Field("Fancyfin address (for example 192.168.1.20:8282)", address, { address = it }, keyboard = KeyboardType.Uri)
+                    message?.let { Text(it, color = Palette.Accent, fontSize = 12.sp) }
+                    GlassButton(
+                        label = if (busy) "Connecting…" else "Connect",
+                        primary = true,
+                        onClick = {
+                            if (busy) return@GlassButton
+                            val clean = normalise(address)
+                            if (clean.isEmpty()) {
+                                message = "Enter the Fancyfin address."
+                                return@GlassButton
+                            }
+                            busy = true
+                            message = null
+                            scope.launch {
+                                try {
+                                    address = client.checkFancyfin(clean)
+                                    step = Step.QuickConnect
+                                } catch (e: Exception) {
+                                    message = if (e.message?.contains("no Jellyfin") == true) {
+                                        "Fancyfin is running but has no Jellyfin address. Set JELLYFIN_URL on the container."
+                                    } else {
+                                        "That doesn't look like Fancyfin. Check the address and port."
+                                    }
+                                }
+                                busy = false
+                            }
+                        },
+                    )
+                }
+
+                Step.QuickConnect -> {
+                    Text("Sign in with Quick Connect", color = Palette.TextMuted, fontSize = 14.sp)
+                    if (code != null) {
+                        Text(code!!, color = Palette.Accent, fontSize = 56.sp, fontWeight = FontWeight.Bold, letterSpacing = 8.sp)
+                        Text(
+                            "On your PC, open Jellyfin, click your profile picture, choose Quick Connect and enter this code.",
+                            color = Palette.TextMuted, fontSize = 13.sp, modifier = Modifier.width(520.dp),
+                        )
+                    } else if (message == null) {
+                        Text("Getting a code…", color = Palette.TextMuted, fontSize = 12.sp)
+                    }
+                    message?.let { Text(it, color = Palette.Accent, fontSize = 12.sp, modifier = Modifier.width(520.dp)) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        if (code == null && message != null) GlassButton("New code", { attempt++ }, primary = true)
+                        GlassButton("Use a password", { step = Step.Password })
+                        GlassButton("Change server", { step = Step.Connect })
+                    }
+                }
+
+                Step.Password -> {
+                    Text("Sign in to Jellyfin", color = Palette.TextMuted, fontSize = 14.sp)
+                    Field("Username", user, { user = it })
+                    Field("Password", password, { password = it }, password = true)
+                    message?.let { Text(it, color = Palette.Accent, fontSize = 12.sp) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        GlassButton(
+                            label = if (busy) "Signing in…" else "Sign in",
+                            primary = true,
+                            onClick = {
+                                if (busy) return@GlassButton
+                                if (user.isEmpty()) {
+                                    message = "Enter your username."
+                                    return@GlassButton
+                                }
+                                busy = true
+                                message = null
+                                scope.launch {
+                                    try {
+                                        client.signIn(address, user, password)
+                                        onSignedIn()
+                                    } catch (e: Exception) {
+                                        message = "Couldn't sign in. Check the username and password."
+                                    }
+                                    busy = false
+                                }
+                            },
+                        )
+                        GlassButton("Use Quick Connect", { step = Step.QuickConnect; attempt++ })
+                    }
                 }
             }
-            Field("Server address (for example 192.168.1.20:8096)", address, { address = it }, keyboard = KeyboardType.Uri)
-            Field("Username", user, { user = it })
-            Field("Password", password, { password = it }, password = true)
-
-            message?.let { Text(it, color = Palette.Accent, fontSize = 12.sp) }
-
-            GlassButton(
-                label = if (busy) "Signing in…" else "Sign in",
-                primary = true,
-                onClick = {
-                    if (busy) return@GlassButton
-                    val clean = normalise(address)
-                    if (clean.isEmpty() || user.isEmpty()) {
-                        message = "Enter the server address and your username."
-                        return@GlassButton
-                    }
-                    busy = true
-                    message = null
-                    scope.launch {
-                        try {
-                            client.probe(clean)
-                            client.signIn(clean, user, password)
-                            onSignedIn()
-                        } catch (e: Exception) {
-                            message = "Couldn't sign in. Check the address, username and password."
-                        }
-                        busy = false
-                    }
-                },
-            )
         }
     }
 }

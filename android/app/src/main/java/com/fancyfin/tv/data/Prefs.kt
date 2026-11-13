@@ -4,13 +4,14 @@ import android.content.Context
 import com.fancyfin.tv.MainActivity
 import java.util.UUID
 
-/** What the app remembers between launches: which server, who is signed in, and this device's id. */
+/** What the app remembers between launches: which Fancyfin, who is signed in, and this device's id. */
 class Prefs(context: Context) {
     private val prefs = context.getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE)
 
-    var server: String?
-        get() = prefs.getString(KEY_SERVER, null)
-        set(value) = prefs.edit().putString(KEY_SERVER, value).apply()
+    /** The Fancyfin container's address. Jellyfin, Radarr, Sonarr and TMDB are all reached through it. */
+    var fancyfin: String?
+        get() = prefs.getString(KEY_FANCYFIN, null)
+        set(value) = prefs.edit().putString(KEY_FANCYFIN, value).apply()
 
     var token: String?
         get() = prefs.getString(KEY_TOKEN, null)
@@ -40,7 +41,7 @@ class Prefs(context: Context) {
 
     private companion object {
         // Not "server": the old web-view version of the app kept the Fancyfin address under that name.
-        const val KEY_SERVER = "jellyfin_server"
+        const val KEY_FANCYFIN = "fancyfin_url"
         const val KEY_TOKEN = "jellyfin_token"
         const val KEY_USER_ID = "jellyfin_user_id"
         const val KEY_USER_NAME = "jellyfin_user_name"
