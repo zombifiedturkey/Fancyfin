@@ -12,7 +12,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -44,6 +53,7 @@ private fun Field(
     password: Boolean = false,
     keyboard: KeyboardType = KeyboardType.Text,
 ) {
+    val focus = LocalFocusManager.current
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(label, color = Palette.TextMuted, fontSize = 11.sp)
         BasicTextField(
@@ -53,8 +63,21 @@ private fun Field(
             textStyle = TextStyle(color = Palette.Text, fontSize = 15.sp),
             cursorBrush = SolidColor(Palette.Accent),
             visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
-            keyboardOptions = KeyboardOptions(keyboardType = keyboard),
-            modifier = Modifier.width(320.dp),
+            keyboardOptions = KeyboardOptions(keyboardType = keyboard, imeAction = ImeAction.Next),
+            // The tick on the on-screen keyboard moves on to the next control instead of leaving focus stuck here.
+            keyboardActions = KeyboardActions(onNext = { focus.moveFocus(FocusDirection.Down) }),
+            modifier = Modifier.width(320.dp).onPreviewKeyEvent { event ->
+                // A text field would otherwise swallow up and down on the remote.
+                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) {
+                    focus.moveFocus(FocusDirection.Down)
+                    true
+                } else if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionUp) {
+                    focus.moveFocus(FocusDirection.Up)
+                    true
+                } else {
+                    false
+                }
+            },
             decorationBox = { inner ->
                 Box(
                     Modifier
