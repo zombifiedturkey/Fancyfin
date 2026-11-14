@@ -11,6 +11,7 @@ import {
 	ShowsBrowsePage,
 	ShowsGenrePage,
 } from "./routes/Browse";
+import { AttentionPage } from "./routes/Attention";
 import { Home } from "./routes/Home";
 import { ItemPage } from "./routes/Item";
 import { MoviesLibraryPage, ShowsLibraryPage } from "./routes/Library";
@@ -96,6 +97,12 @@ const itemRoute = createRoute({
 	component: ItemPage,
 });
 
+const attentionRoute = createRoute({
+	getParentRoute: () => appRoute,
+	path: "/attention",
+	component: AttentionPage,
+});
+
 const routeTree = rootRoute.addChildren([
 	loginRoute,
 	watchRoute,
@@ -108,6 +115,7 @@ const routeTree = rootRoute.addChildren([
 		showsLibraryRoute,
 		showsGenreRoute,
 		itemRoute,
+		attentionRoute,
 	]),
 ]);
 

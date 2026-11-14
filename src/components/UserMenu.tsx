@@ -1,5 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
+import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import { useIsAdmin } from "../lib/admin-queries";
 import { useAuth, useSession } from "../auth/AuthProvider";
 import { SettingsDialog } from "./SettingsDialog";
 import { UserAvatar } from "./UserAvatar";
@@ -8,6 +10,7 @@ import { UserAvatar } from "./UserAvatar";
 export function UserMenu() {
 	const session = useSession();
 	const { signOut } = useAuth();
+	const isAdmin = useIsAdmin();
 	const [open, setOpen] = useState(false);
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const rootRef = useRef<HTMLDivElement>(null);
@@ -81,6 +84,16 @@ export function UserMenu() {
 							</div>
 						</div>
 						<div className="my-1 h-px bg-glass-border" />
+						{isAdmin.data && (
+							<Link
+								to="/attention"
+								role="menuitem"
+								onClick={() => setOpen(false)}
+								className="block w-full rounded-xl px-3 py-2.5 text-left text-sm text-ink-muted transition-colors hover:bg-glass-strong hover:text-ink"
+							>
+								Attention
+							</Link>
+						)}
 						<button
 							type="button"
 							role="menuitem"
