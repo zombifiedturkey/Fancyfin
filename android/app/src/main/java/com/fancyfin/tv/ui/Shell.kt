@@ -1,5 +1,7 @@
 package com.fancyfin.tv.ui
 
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -192,29 +194,46 @@ fun Shell(
                 verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
                 Text("Fancyfin", color = Palette.Text, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 6.dp))
-                var section = ""
-                Tab.values().filter { it.inMenu }.forEach { tab ->
-                    if (tab.section != section) {
-                        section = tab.section
-                        Text(
-                            section.uppercase(), color = Palette.TextMuted, fontSize = 10.sp, letterSpacing = 1.2.sp,
-                            modifier = Modifier.padding(start = 6.dp, top = 16.dp, bottom = 3.dp),
+                Column(
+                    Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    var section = ""
+                    Tab.values().filter { it.inMenu }.forEach { tab ->
+                        if (tab.section != section) {
+                            // Your pinned genres and collections sit just before System, with headings only when pinned.
+                            if (tab.section == "System") {
+                                if (Pins.genres.isNotEmpty()) {
+                                    MenuHeading("GENRES")
+                                    Pins.genres.toList().forEach { g -> MenuItem(g.label, false, Modifier, { MenuActions.genre(g.genre, g.types) }) }
+                                }
+                                if (Pins.collections.isNotEmpty()) {
+                                    MenuHeading("COLLECTIONS")
+                                    Pins.collections.toList().forEach { c -> MenuItem(c.name, false, Modifier, { MenuActions.collection(c.key) }) }
+                                }
+                            }
+                            section = tab.section
+                            MenuHeading(section.uppercase())
+                        }
+                        MenuItem(
+                            label = tab.label,
+                            selected = tab == current,
+                            modifier = if (tab == Tab.Search) Modifier.focusRequester(sidebarFocus) else Modifier,
+                            onClick = { onTab(tab) },
                         )
                     }
-                    MenuItem(
-                        label = tab.label,
-                        selected = tab == current,
-                        modifier = if (tab == Tab.Search) Modifier.focusRequester(sidebarFocus) else Modifier,
-                        onClick = { onTab(tab) },
-                    )
                 }
-                Box(Modifier.weight(1f))
                 MenuItem("Sign out", false, Modifier, onSignOut)
                 Box(Modifier.height(16.dp))
             }
             }
         }
     }
+}
+
+@Composable
+private fun MenuHeading(text: String) {
+    Text(text, color = Palette.TextMuted, fontSize = 10.sp, letterSpacing = 1.2.sp, modifier = Modifier.padding(start = 6.dp, top = 16.dp, bottom = 3.dp))
 }
 
 @Composable

@@ -561,8 +561,17 @@ fun GenreScreen(
                 failed -> Text("Couldn't reach your server.", color = Palette.Accent, fontSize = 14.sp, modifier = Modifier.padding(20.dp))
                 loading -> Text("Loading…", color = Palette.TextMuted, fontSize = 14.sp, modifier = Modifier.padding(20.dp))
                 else -> key(genre) {
+                  Column(contentModifier.fillMaxSize()) {
+                    Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 40.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(genre, color = Palette.Text, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        GlassButton(
+                            if (Pins.hasGenre(genre, types)) "Unpin from menu" else "Pin to menu",
+                            { Pins.toggleGenre(genre, types) },
+                            compact = true,
+                        )
+                    }
                     FeatureList(
-                        modifier = contentModifier,
+                        modifier = Modifier.weight(1f),
                         state = state,
                         client = client,
                         sections = sections,
@@ -574,6 +583,7 @@ fun GenreScreen(
                         onOpenItem = onOpen,
                         onExit = null,
                     )
+                  }
                 }
             }
             message?.let {

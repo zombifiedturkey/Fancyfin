@@ -49,6 +49,8 @@ class CollectionsState {
     var filter by mutableStateOf(0)
     var query by mutableStateOf("")
     var lastKey: String? = null
+    /** A collection to open as soon as it's found (from a pin in the menu). */
+    var pendingOpen by mutableStateOf<String?>(null)
     val grid = LazyGridState()
 }
 
@@ -73,6 +75,17 @@ fun CollectionsScreen(
             state.scanned = true
         } catch (e: Exception) {
             if (state.tiles.isEmpty()) state.status = "Couldn't reach your server."
+        }
+    }
+
+    LaunchedEffect(state.tiles.size, state.pendingOpen, state.scanned) {
+        val key = state.pendingOpen ?: return@LaunchedEffect
+        val tile = state.tiles.firstOrNull { it.key == key }
+        if (tile != null) {
+            state.pendingOpen = null
+            onOpen(tile)
+        } else if (state.scanned) {
+            state.pendingOpen = null
         }
     }
 
@@ -208,13 +221,20 @@ fun CollectionScreen(
     Box(Modifier.fillMaxSize()) {
         Backdrop(null)
         Column(Modifier.fillMaxSize()) {
-            Column(Modifier.padding(start = 40.dp, top = 22.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(tile.kind.uppercase(), color = Palette.Accent, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
-                Text(tile.name, color = Palette.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                val total = tile.total
-                Text(
-                    if (total != null && total > tile.owned) "${tile.owned} of $total films on your server" else "${tile.owned} films",
-                    color = Palette.TextMuted, fontSize = 12.sp,
+            Row(Modifier.fillMaxWidth().padding(start = 40.dp, end = 40.dp, top = 22.dp), verticalAlignment = Alignment.Bottom) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(tile.kind.uppercase(), color = Palette.Accent, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                    Text(tile.name, color = Palette.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                    val total = tile.total
+                    Text(
+                        if (total != null && total > tile.owned) "${tile.owned} of $total films on your server" else "${tile.owned} films",
+                        color = Palette.TextMuted, fontSize = 12.sp,
+                    )
+                }
+                GlassButton(
+                    if (Pins.hasCollection(tile.key)) "Unpin from menu" else "Pin to menu",
+                    { Pins.toggleCollection(tile.key, tile.name) },
+                    compact = true,
                 )
             }
             LazyVerticalGrid(

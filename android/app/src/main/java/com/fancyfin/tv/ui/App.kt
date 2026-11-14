@@ -33,7 +33,7 @@ private sealed class Route {
 @Composable
 fun FancyfinApp() {
     val context = LocalContext.current
-    remember { UiSettings.load(context) }
+    remember { UiSettings.load(context); Pins.load(context) }
     val prefs = remember { Prefs(context) }
     val client = remember { JellyfinClient(prefs) }
     var signedIn by remember { mutableStateOf(client.isSignedIn) }
@@ -69,6 +69,14 @@ fun FancyfinApp() {
                 stack.clear()
                 stack.add(Route.Main(tab))
             }
+            val back: () -> Unit = {
+                if (stack.size > 1) {
+                    // Coming back from the player: watch progress changed, so the rows refresh (keeping your place).
+                    if (stack.last() is Route.Play) screens.values.forEach { it.loaded = false }
+                    stack.removeAt(stack.lastIndex)
+                }
+            }
+
             // The last stop for Back: step back through the pages, then to Home, then ask before closing.
             // Screens with their own Back handling (menus, dialogs, the Home rows) take it first.
             BackHandler {
@@ -101,15 +109,18 @@ fun FancyfinApp() {
                     }
                 }
             }
-            val showTrailer: (List<String>) -> Unit = { keys -> trailer = keys }
-            val back: () -> Unit = {
-                if (stack.size > 1) {
-                    // Coming back from the player: watch progress changed, so the rows refresh (keeping your place).
-                    if (stack.last() is Route.Play) screens.values.forEach { it.loaded = false }
-                    stack.removeAt(stack.lastIndex)
-                }
+            MenuActions.genre = { genre, types ->
+                stack.clear()
+                stack.add(Route.Main(Tab.Home))
+                stack.add(Route.Genre(genre, types))
             }
-
+            MenuActions.collection = { key ->
+                stack.clear()
+                stack.add(Route.Main(Tab.Collections))
+                val tile = collections.tiles.firstOrNull { it.key == key }
+                if (tile != null) stack.add(Route.Collection(tile)) else collections.pendingOpen = key
+            }
+            val showTrailer: (List<String>) -> Unit = { keys -> trailer = keys }
             when (val route = stack.last()) {
                 is Route.Main -> when (route.tab) {
                     Tab.Home, Tab.Movies, Tab.Shows -> BrowseScreen(route.tab, screens.getOrPut("tab:${route.tab}") { FeatureState() }, client, open, play, openGenre, openTitle, goTab, signOut)
