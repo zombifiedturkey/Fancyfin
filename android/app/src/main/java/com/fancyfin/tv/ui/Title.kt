@@ -259,7 +259,7 @@ fun TitleScreen(
         if (hero != null) {
             val scrolled = if (listState.firstVisibleItemIndex == 0) listState.firstVisibleItemScrollOffset else 100000
             Box(
-                Modifier.fillMaxWidth().height(340.dp)
+                Modifier.fillMaxWidth().height(400.dp)
                     .offset { IntOffset(0, -scrolled) }
                     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                     .drawWithContent {
@@ -279,12 +279,13 @@ fun TitleScreen(
             LazyColumn(
                 Modifier.fillMaxSize(),
                 state = listState,
-                contentPadding = PaddingValues(top = 20.dp, bottom = 300.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(top = 80.dp, bottom = 300.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 var n = 0
 
-                // Poster, then what it is, then how it will look and sound (or when it's out).
+                // Home state: the movie's picture fills the top of the screen, with the poster and details,
+                // the buttons and the cast sitting low down.
                 val headerIndex = n++
                 item {
                     Row(Modifier.padding(horizontal = 24.dp).then(track(headerIndex)), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -295,7 +296,7 @@ fun TitleScreen(
                         ) {
                             if (posterUrl != null) AsyncImage(model = posterUrl, contentDescription = title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                         }
-                        Column(Modifier.width(430.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             val logo = shown?.let { client.logo(it) }
                             if (logo != null) {
                                 AsyncImage(
@@ -305,89 +306,95 @@ fun TitleScreen(
                             } else {
                                 Text(title, color = Palette.Text, fontSize = 28.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             }
-                            tagline?.let { Text(it, color = Palette.TextMuted, fontSize = 12.sp, fontStyle = FontStyle.Italic, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                            tagline?.let { Text(it, color = Palette.Text, fontSize = 12.sp, fontStyle = FontStyle.Italic, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 listOfNotNull(
                                     year?.toString(), shown?.officialRating, runtimeText(minutes), rating?.let { "★ " + "%.1f".format(it) },
                                 ).plus(genres.take(3)).forEach { Chip(it) }
                             }
-                            overview?.let { Text(it, color = Palette.Text, fontSize = 12.sp, maxLines = 3, overflow = TextOverflow.Ellipsis) }
-                        }
-                        Column(Modifier.width(250.dp).padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            if (ref.server != null) {
-                                if (best != null) {
-                                    Text("QUALITY", color = Palette.TextMuted, fontSize = 10.sp, letterSpacing = 1.2.sp)
-                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Text(best.resolution, color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                                        Text(
-                                            best.range, fontSize = 13.sp,
-                                            color = if (best.range != "SDR") Palette.Accent else Palette.TextMuted,
-                                            fontWeight = if (best.range != "SDR") FontWeight.SemiBold else FontWeight.Normal,
-                                        )
-                                    }
-                                    val sound = listOf(best.audio, best.codec).filter { it.isNotEmpty() }.joinToString("   ·   ")
-                                    if (sound.isNotEmpty()) Text(sound, color = Palette.Text, fontSize = 12.sp)
-                                    val file = listOf(best.container, sizeText(best.sizeBytes)).filter { it.isNotEmpty() }.joinToString("   ·   ")
-                                    if (file.isNotEmpty()) Text(file, color = Palette.TextMuted, fontSize = 12.sp)
-                                    if (versions.size > 1) {
-                                        Text(
-                                            "⧉  ${versions.size} copies · best shown, you choose when you play",
-                                            color = Palette.Accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-                                            modifier = Modifier.padding(top = 4.dp),
-                                        )
-                                    }
-                                }
-                            } else {
-                                Text("NOT ON YOUR SERVER", color = Palette.TextMuted, fontSize = 10.sp, letterSpacing = 1.2.sp)
-                                status?.let { Text(it, color = Palette.Accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
-                            }
+                            overview?.let { Text(it, color = Palette.Text, fontSize = 12.sp, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(620.dp)) }
                         }
                     }
                 }
 
+                // Buttons on the left; on the right, how it will look and sound (or when it's out).
                 val buttonsIndex = n++
                 item {
-                    Row(Modifier.padding(start = 24.dp).then(track(buttonsIndex)), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        var firstAssigned = false
-                        fun lead(): Modifier = if (!firstAssigned) { firstAssigned = true; Modifier.focusRequester(first) } else Modifier
-                        if (target != null) {
-                            GlassButton(
-                                label = (if (resuming) "Resume" else "Play") + (target.episodeLabel?.let { " $it" } ?: ""),
-                                primary = true,
-                                modifier = lead(),
-                                onClick = { onPlay(target) },
-                            )
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 24.dp).then(track(buttonsIndex)),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            var firstAssigned = false
+                            fun lead(): Modifier = if (!firstAssigned) { firstAssigned = true; Modifier.focusRequester(first) } else Modifier
+                            if (target != null) {
+                                GlassButton(
+                                    label = (if (resuming) "Resume" else "Play") + (target.episodeLabel?.let { " $it" } ?: ""),
+                                    primary = true,
+                                    modifier = lead(),
+                                    onClick = { onPlay(target) },
+                                )
+                            }
+                            if (ref.server == null) {
+                                // Becomes "Add to Radarr / Sonarr" once the arr flow is in.
+                                GlassButton("Not on your server", {}, modifier = lead(), clear = true)
+                            }
+                            if (shown != null) {
+                                GlassButton(
+                                    label = if (shown.played) "Watched ✓" else "Mark watched",
+                                    modifier = lead(),
+                                    onClick = {
+                                        val next = !shown.played
+                                        scope.launch {
+                                            try {
+                                                client.setPlayed(shown.id, next)
+                                                item = client.item(shown.id, shown.duplicateIds)
+                                            } catch (e: Exception) { /* leave the button as it was */ }
+                                        }
+                                    },
+                                )
+                                GlassButton(
+                                    label = if (shown.favorite) "★ Favourite" else "☆ Favourite",
+                                    onClick = {
+                                        val next = !shown.favorite
+                                        scope.launch {
+                                            try {
+                                                client.setFavorite(shown.id, next)
+                                                item = client.item(shown.id, shown.duplicateIds)
+                                            } catch (e: Exception) { /* leave the button as it was */ }
+                                        }
+                                    },
+                                )
+                            }
                         }
-                        if (ref.server == null) {
-                            // Becomes "Add to Radarr / Sonarr" once the arr flow is in.
-                            GlassButton("Not on your server", {}, modifier = lead(), clear = true)
-                        }
-                        if (shown != null) {
-                            GlassButton(
-                                label = if (shown.played) "Watched ✓" else "Mark watched",
-                                modifier = lead(),
-                                onClick = {
-                                    val next = !shown.played
-                                    scope.launch {
-                                        try {
-                                            client.setPlayed(shown.id, next)
-                                            item = client.item(shown.id, shown.duplicateIds)
-                                        } catch (e: Exception) { /* leave the button as it was */ }
+                        Box(Modifier.weight(1f))
+                        // On its own dark glass so it stays readable over a bright picture.
+                        val info = ref.server == null || best != null
+                        if (info) {
+                            Column(
+                                Modifier.background(Color(0x99000000), RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 6.dp),
+                                horizontalAlignment = Alignment.End,
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                if (ref.server != null && best != null) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Text(best.resolution, color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                        Text(
+                                            best.range, fontSize = 12.sp,
+                                            color = if (best.range != "SDR") Palette.Accent else Palette.TextMuted,
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
                                     }
-                                },
-                            )
-                            GlassButton(
-                                label = if (shown.favorite) "★ Favourite" else "☆ Favourite",
-                                onClick = {
-                                    val next = !shown.favorite
-                                    scope.launch {
-                                        try {
-                                            client.setFavorite(shown.id, next)
-                                            item = client.item(shown.id, shown.duplicateIds)
-                                        } catch (e: Exception) { /* leave the button as it was */ }
+                                    val details = listOf(best.audio, best.codec, best.container, sizeText(best.sizeBytes)).filter { it.isNotEmpty() }.joinToString("  ·  ")
+                                    if (details.isNotEmpty()) Text(details, color = Palette.Text, fontSize = 11.sp)
+                                    if (versions.size > 1) {
+                                        Text("⧉ ${versions.size} copies · you choose when you play", color = Palette.Accent, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                                     }
-                                },
-                            )
+                                } else if (ref.server == null) {
+                                    Text("NOT ON YOUR SERVER", color = Palette.TextMuted, fontSize = 10.sp, letterSpacing = 1.2.sp)
+                                    status?.let { Text(it, color = Palette.Accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
+                                }
+                            }
                         }
                     }
                 }
