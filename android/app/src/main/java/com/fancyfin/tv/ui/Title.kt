@@ -96,7 +96,7 @@ private fun SectionTitle(text: String) {
 
 /** A poster you can focus; accent border for the one you're looking at, a dot when it's on your server. */
 @Composable
-private fun PosterTile(
+internal fun PosterTile(
     url: String?,
     title: String,
     onServer: Boolean,
@@ -608,9 +608,13 @@ private fun Chip(text: String) {
     )
 }
 
-private fun resolutionHeight(v: MediaVersion): Int = Regex("\\d+").find(v.resolution)?.value?.toIntOrNull() ?: 0
+internal fun resolutionHeight(v: MediaVersion): Int = Regex("\\d+").find(v.resolution)?.value?.toIntOrNull() ?: 0
 
-private fun rangeRank(v: MediaVersion): Int = when {
+/** The copy that looks best: highest resolution, then HDR type, then size. */
+internal fun bestVersion(versions: List<MediaVersion>): MediaVersion? =
+    versions.maxWithOrNull(compareBy<MediaVersion>({ resolutionHeight(it) }, { rangeRank(it) }, { it.sizeBytes }))
+
+internal fun rangeRank(v: MediaVersion): Int = when {
     v.range.contains("Dolby Vision") -> 4
     v.range.contains("HDR10") -> 3
     v.range.contains("HDR") || v.range.contains("HLG") -> 2

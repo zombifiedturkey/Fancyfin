@@ -89,6 +89,20 @@ data class Discover(
     val poster: String?,
 )
 
+/** A franchise (a TMDB collection) or a studio, with the movies you own in it. */
+class CollectionTile(
+    val key: String,
+    val kind: String,
+    val name: String,
+    val items: List<Item>,
+    val posters: List<String>,
+    /** Films in the whole franchise, when known. */
+    val total: Int?,
+    val collectionId: Int?,
+) {
+    val owned: Int get() = items.size
+}
+
 class ApiException(message: String, val code: Int = 0) : IOException(message)
 
 /** Talks to a Jellyfin server over its REST API. All calls run off the main thread. */
@@ -511,6 +525,110 @@ class JellyfinClient(private val prefs: Prefs) {
         parseTmdb(sorted, "movie")
     }
 
+    // ---- Collections --------------------------------------------------------------------------
+
+    /**
+     * Studios (from Jellyfin) and franchises (TMDB collections) for the movies on the server. Franchises
+     * need a TMDB look-up per movie the first time, so they fill in as they are found and are remembered
+     * after that. `onUpdate` gets the list so far and a progress note (null when finished).
+     */
+    suspend fun collectionTiles(onUpdate: (List<CollectionTile>, String?) -> Unit) {
+        val raw = withContext(Dispatchers.IO) {
+            get("/Users/$userId/Items?IncludeItemTypes=Movie&Recursive=true&SortBy=SortName&Fields=$fields,Studios&EnableTotalRecordCount=false&Limit=5000")
+        }
+        val movies = items(raw)
+        val studiosById = HashMap<String, List<String>>()
+        JSONObject(raw).optJSONArray("Items")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val studios = o.optJSONArray("Studios") ?: continue
+                studiosById[o.optString("Id")] = (0 until studios.length()).map { studios.getJSONObject(it).optString("Name") }
+            }
+        }
+        fun posters(list: List<Item>): List<String> =
+            list.sortedByDescending { it.rating ?: 0.0 }.mapNotNull { poster(it, 200) }.take(4)
+
+        val byStudio = HashMap<String, ArrayList<Item>>()
+        for (m in movies) for (name in studiosById[m.id].orEmpty()) byStudio.getOrPut(name) { ArrayList() }.add(m)
+        val studioTiles = byStudio.filter { it.value.size >= 3 }
+            .map { (name, list) -> CollectionTile("studio:$name", "studio", name, list.sortedBy { it.year ?: 0 }, posters(list), null, null) }
+            .sortedByDescending { it.owned }
+
+        // movie id -> (collection id, name)
+        val collectionOf = HashMap<String, Pair<Int, String>>()
+        val sizes = HashMap<Int, Int>()
+        val pending = ArrayList<Item>()
+        for (m in movies) {
+            val t = m.tmdbId ?: continue
+            val cached = prefs.cacheGet("col:$t")
+            if (cached == null) pending.add(m)
+            else if (cached != "-") cached.split('|', limit = 2).let { p -> p[0].toIntOrNull()?.let { collectionOf[m.id] = it to p.getOrElse(1) { "" } } }
+        }
+        fun franchiseTiles(): List<CollectionTile> {
+            val groups = HashMap<Int, ArrayList<Item>>()
+            val names = HashMap<Int, String>()
+            val byId = movies.associateBy { it.id }
+            for ((movieId, c) in collectionOf) {
+                val item = byId[movieId] ?: continue
+                groups.getOrPut(c.first) { ArrayList() }.add(item)
+                names[c.first] = c.second.removeSuffix(" Collection")
+            }
+            return groups.filter { it.value.size >= 2 }.map { (id, list) ->
+                val total = sizes[id] ?: prefs.cacheGet("colsize:$id")?.toIntOrNull()
+                CollectionTile("franchise:$id", "franchise", names[id].orEmpty(), list.sortedBy { it.year ?: 0 }, posters(list), total, id)
+            }.sortedByDescending { it.owned }
+        }
+        fun everything() = (franchiseTiles() + studioTiles).sortedByDescending { it.owned }
+
+        onUpdate(everything(), if (pending.isNotEmpty()) "Finding franchises… 0 of ${pending.size}" else null)
+        var done = 0
+        for (chunk in pending.chunked(6)) {
+            val found = coroutineScope {
+                chunk.map { m ->
+                    async(Dispatchers.IO) {
+                        try {
+                            val t = m.tmdbId!!
+                            val c = JSONObject(request(fancyfin, "/tmdb/movie/$t")).optJSONObject("belongs_to_collection")
+                            Triple(m, t, c?.let { it.optInt("id") to it.optString("name") })
+                        } catch (e: ApiException) {
+                            if (e.code == 404) Triple(m, m.tmdbId!!, null) else null
+                        } catch (e: Exception) { null }
+                    }
+                }.awaitAll()
+            }
+            val save = HashMap<String, String>()
+            for (f in found) {
+                if (f == null) continue
+                val (m, t, c) = f
+                if (c != null && c.first > 0) {
+                    collectionOf[m.id] = c
+                    save["col:$t"] = "${c.first}|${c.second}"
+                } else {
+                    save["col:$t"] = "-"
+                }
+            }
+            prefs.cachePut(save)
+            done += chunk.size
+            if ((done / 6) % 4 == 0) onUpdate(everything(), "Finding franchises… $done of ${pending.size}")
+        }
+
+        // How many films each franchise has in all, for "35 of 39".
+        val needSize = franchiseTiles().filter { it.total == null }.mapNotNull { it.collectionId }
+        for (chunk in needSize.chunked(6)) {
+            val got = coroutineScope {
+                chunk.map { id ->
+                    async(Dispatchers.IO) {
+                        try { id to (JSONObject(request(fancyfin, "/tmdb/collection/$id")).optJSONArray("parts")?.length() ?: 0) } catch (e: Exception) { null }
+                    }
+                }.awaitAll()
+            }
+            val save = HashMap<String, String>()
+            for (g in got) if (g != null && g.second > 0) { sizes[g.first] = g.second; save["colsize:${g.first}"] = g.second.toString() }
+            prefs.cachePut(save)
+        }
+        onUpdate(everything(), null)
+    }
+
     // ---- Playback extras ---------------------------------------------------------------------
 
     /** Chapters, intro/credits markers, sidecar subtitles and seek-bar previews for a video. Never throws. */
@@ -645,7 +763,7 @@ class JellyfinClient(private val prefs: Prefs) {
         throw ApiException("$label didn't return an exact match for this title.")
     }
 
-    suspend fun arrOptions(kind: String, tmdbId: Int): ArrOptions = withContext(Dispatchers.IO) {
+    suspend fun arrOptions(kind: String, tmdbId: Int?): ArrOptions = withContext(Dispatchers.IO) {
         val movie = kind == "movie"
         val app = if (movie) "radarr" else "sonarr"
         val label = if (movie) "Radarr" else "Sonarr"
@@ -655,7 +773,7 @@ class JellyfinClient(private val prefs: Prefs) {
             throw ApiException("$label has no quality profile or root folder to add to.")
         }
         val seasons = ArrayList<Int>()
-        if (!movie) {
+        if (!movie && tmdbId != null) {
             val list = arrLookup(kind, tmdbId).optJSONArray("seasons")
             if (list != null) for (i in 0 until list.length()) {
                 val n = list.getJSONObject(i).optInt("seasonNumber")
@@ -891,11 +1009,11 @@ class JellyfinClient(private val prefs: Prefs) {
     }
 
     /** A transcoded stream, used only when the TV can't play the original file. */
-    fun transcodeUrl(id: String, sourceId: String? = null): String =
+    fun transcodeUrl(id: String, sourceId: String? = null, maxHeight: Int? = null): String =
         "$server/Videos/$id/main.m3u8?MediaSourceId=${sourceId ?: id}&DeviceId=${prefs.deviceId}" +
             "&PlaySessionId=${java.util.UUID.randomUUID()}&VideoCodec=hevc,h264&AudioCodec=eac3,ac3,aac" +
             "&TranscodingMaxAudioChannels=6&MaxStreamingBitrate=120000000&SegmentContainer=ts" +
-            "&BreakOnNonKeyFrames=True&api_key=$token"
+            "&BreakOnNonKeyFrames=True" + (if (maxHeight != null) "&MaxHeight=$maxHeight" else "") + "&api_key=$token"
 
     fun directStreamUrl(id: String, sourceId: String? = null): String =
         "$server/Videos/$id/stream?static=true&api_key=$token" + if (sourceId != null) "&MediaSourceId=$sourceId" else ""

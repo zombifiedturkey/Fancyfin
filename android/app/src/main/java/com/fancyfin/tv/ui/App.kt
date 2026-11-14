@@ -25,7 +25,8 @@ private sealed class Route {
     data class Title(val ref: TitleRef) : Route()
     data class Person(val ref: PersonRef) : Route()
     data class Genre(val genre: String, val types: String) : Route()
-    data class Play(val item: Item, val sourceId: String?) : Route()
+    data class Play(val item: Item, val sourceId: String?, val maxHeight: Int? = null) : Route()
+    data class Collection(val tile: com.fancyfin.tv.data.CollectionTile) : Route()
 }
 
 /** The whole app. */
@@ -40,6 +41,10 @@ fun FancyfinApp() {
     val scope = rememberCoroutineScope()
     var askExit by remember { mutableStateOf(false) }
     var trailer by remember { mutableStateOf<List<String>?>(null) }
+    // Each browse page's rows, focus and scroll, so Back lands where you were.
+    val screens = remember { HashMap<String, FeatureState>() }
+    val collections = remember { CollectionsState() }
+    val searchState = remember { SearchState() }
     var choice by remember { mutableStateOf<Pair<Item, List<MediaVersion>>?>(null) }
 
     TvScale {
@@ -60,6 +65,7 @@ fun FancyfinApp() {
                 signedIn = false
             }
             val goTab: (Tab) -> Unit = { tab ->
+                screens.clear()
                 stack.clear()
                 stack.add(Route.Main(tab))
             }
@@ -68,7 +74,7 @@ fun FancyfinApp() {
             BackHandler {
                 val here = stack.last()
                 when {
-                    stack.size > 1 -> stack.removeAt(stack.lastIndex)
+                    stack.size > 1 -> back()
                     here is Route.Main && here.tab != Tab.Home -> goTab(Tab.Home)
                     else -> askExit = true
                 }
@@ -77,27 +83,43 @@ fun FancyfinApp() {
             val openTitle: (TitleRef) -> Unit = { ref -> stack.add(Route.Title(ref)) }
             val openGenre: (String, String) -> Unit = { genre, types -> stack.add(Route.Genre(genre, types)) }
             // Playing a title that has more than one version asks which one first.
+            // Your quality limit from Settings turns a bigger copy into a converted stream.
+            fun playRoute(item: Item, v: MediaVersion?, useCopy: Boolean = false): Route.Play {
+                val cap = UiSettings.maxHeight
+                val height = v?.let { resolutionHeight(it) } ?: 0
+                return Route.Play(if (useCopy && v != null) v.item else item, v?.sourceId, if (cap > 0 && height > cap) cap else null)
+            }
             val play: (Item) -> Unit = { item ->
                 scope.launch {
                     val versions = try { client.versions(item) } catch (e: Exception) { emptyList() }
-                    if (versions.size > 1) {
+                    if (versions.size > 1 && UiSettings.bestCopy) {
+                        stack.add(playRoute(item, bestVersion(versions), useCopy = true))
+                    } else if (versions.size > 1) {
                         choice = item to versions
                     } else {
-                        stack.add(Route.Play(item, versions.firstOrNull()?.sourceId))
+                        stack.add(playRoute(item, versions.firstOrNull()))
                     }
                 }
             }
             val showTrailer: (List<String>) -> Unit = { keys -> trailer = keys }
-            val back: () -> Unit = { if (stack.size > 1) stack.removeAt(stack.lastIndex) }
+            val back: () -> Unit = {
+                if (stack.size > 1) {
+                    // Coming back from the player: watch progress changed, so the rows refresh (keeping your place).
+                    if (stack.last() is Route.Play) screens.values.forEach { it.loaded = false }
+                    stack.removeAt(stack.lastIndex)
+                }
+            }
 
             when (val route = stack.last()) {
                 is Route.Main -> when (route.tab) {
-                    Tab.Home, Tab.Movies, Tab.Shows -> BrowseScreen(route.tab, client, open, play, openGenre, openTitle, goTab, signOut)
-                    Tab.Search -> SearchScreen(client, open, goTab, signOut)
-                    Tab.Settings -> SettingsScreen(goTab, signOut)
+                    Tab.Home, Tab.Movies, Tab.Shows -> BrowseScreen(route.tab, screens.getOrPut("tab:${route.tab}") { FeatureState() }, client, open, play, openGenre, openTitle, goTab, signOut)
+                    Tab.Search -> SearchScreen(searchState, client, open, goTab, signOut)
+                    Tab.Collections -> CollectionsScreen(client, collections, { stack.add(Route.Collection(it)) }, goTab, signOut)
+                    Tab.Settings -> SettingsScreen(client, goTab, signOut)
                     Tab.AllMovies, Tab.AllShows -> LibraryScreen(route.tab, client, open, goTab, signOut)
                 }
-                is Route.Genre -> GenreScreen(route.genre, route.types, client, open, play, openTitle, goTab, signOut)
+                is Route.Genre -> GenreScreen(route.genre, route.types, screens.getOrPut("genre:${route.genre}:${route.types}") { FeatureState() }, client, open, play, openTitle, goTab, signOut)
+                is Route.Collection -> androidx.compose.runtime.key(route.tile.key) { CollectionScreen(route.tile, client, open, openTitle) }
                 // Keyed so opening another title from this one (More like this, franchise) starts a fresh page
                 // instead of reusing the old page's state.
                 is Route.Title -> androidx.compose.runtime.key(route.ref) {
@@ -105,13 +127,13 @@ fun FancyfinApp() {
                 }
                 is Route.Person -> androidx.compose.runtime.key(route.ref) { PersonScreen(route.ref, client, openTitle) }
                 is Route.Play -> androidx.compose.runtime.key(route.item.id) {
-                    PlayerScreen(route.item, client, route.sourceId, back) { next ->
+                    PlayerScreen(route.item, client, route.sourceId, route.maxHeight, back) { next ->
                         // Autoplay: swap this player for the next episode's.
                         scope.launch {
                             val versions = try { client.versions(next) } catch (e: Exception) { emptyList() }
                             if (stack.lastOrNull() == route) {
                                 stack.removeAt(stack.lastIndex)
-                                stack.add(Route.Play(next, versions.firstOrNull()?.sourceId))
+                                stack.add(playRoute(next, versions.firstOrNull()))
                             }
                         }
                     }
@@ -128,7 +150,7 @@ fun FancyfinApp() {
                     versions = versions,
                     onPick = { v ->
                         choice = null
-                        stack.add(Route.Play(v.item, v.sourceId))
+                        stack.add(playRoute(v.item, v, useCopy = true))
                     },
                     onCancel = { choice = null },
                 )

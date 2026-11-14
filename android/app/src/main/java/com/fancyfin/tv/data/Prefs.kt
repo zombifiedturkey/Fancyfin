@@ -35,6 +35,17 @@ class Prefs(context: Context) {
             return made
         }
 
+    private val cache = context.getSharedPreferences("collections_cache", Context.MODE_PRIVATE)
+
+    /** Small lookups worth keeping between launches (which TMDB collection a movie belongs to, and so on). */
+    fun cacheGet(key: String): String? = cache.getString(key, null)
+
+    fun cachePut(values: Map<String, String>) {
+        val edit = cache.edit()
+        values.forEach { (k, v) -> edit.putString(k, v) }
+        edit.apply()
+    }
+
     fun signOut() {
         prefs.edit().remove(KEY_TOKEN).remove(KEY_USER_ID).remove(KEY_USER_NAME).apply()
     }

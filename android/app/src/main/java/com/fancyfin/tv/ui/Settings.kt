@@ -74,6 +74,18 @@ object UiSettings {
         private set
     var backgroundPicture by mutableStateOf(true)
         private set
+    /** Preferred audio language code for playback ("" = whatever the file says first). */
+    var audioLang by mutableStateOf("")
+        private set
+    /** Preferred subtitle language code; "" = automatic (none unless forced), "off" = never. */
+    var subLang by mutableStateOf("")
+        private set
+    /** Highest video height to play at; 0 = play the original. */
+    var maxHeight by mutableStateOf(0)
+        private set
+    /** Play the best copy straight away instead of asking which copy. */
+    var bestCopy by mutableStateOf(false)
+        private set
     /** Ask which quality profile, folder and season to use when adding to Radarr / Sonarr. */
     var askArr by mutableStateOf(true)
         private set
@@ -90,11 +102,40 @@ object UiSettings {
         accent = AccentChoice.values().firstOrNull { it.name == p.getString("ui_accent", null) } ?: AccentChoice.Teal
         backgroundPicture = p.getBoolean("ui_bg_picture", true)
         askArr = p.getBoolean("ui_ask_arr", true)
+        audioLang = p.getString("pl_audio", "") ?: ""
+        subLang = p.getString("pl_sub", "") ?: ""
+        maxHeight = p.getInt("pl_max_height", 0)
+        bestCopy = p.getBoolean("pl_best_copy", false)
     }
 
     fun chooseAskArr(value: Boolean) {
         askArr = value
         prefs?.edit()?.putBoolean("ui_ask_arr", value)?.apply()
+    }
+
+    fun chooseAudioLang(code: String) {
+        audioLang = code
+        prefs?.edit()?.putString("pl_audio", code)?.apply()
+    }
+
+    fun chooseSubLang(code: String) {
+        subLang = code
+        prefs?.edit()?.putString("pl_sub", code)?.apply()
+    }
+
+    fun chooseMaxHeight(h: Int) {
+        maxHeight = h
+        prefs?.edit()?.putInt("pl_max_height", h)?.apply()
+    }
+
+    fun chooseBestCopy(value: Boolean) {
+        bestCopy = value
+        prefs?.edit()?.putBoolean("pl_best_copy", value)?.apply()
+    }
+
+    /** Set the default profile and folder for "movie" or "series" without changing whether to ask. */
+    fun saveArr(kind: String, profile: Int, folder: String) {
+        prefs?.edit()?.putInt("arr_${kind}_profile", profile)?.putString("arr_${kind}_folder", folder)?.apply()
     }
 
     /** The profile and folder last remembered for "movie" or "series", or null if none. */
@@ -107,7 +148,7 @@ object UiSettings {
 
     /** Remember these choices and stop asking, until the Settings toggle is switched back on. */
     fun rememberArr(kind: String, profile: Int, folder: String) {
-        prefs?.edit()?.putInt("arr_${kind}_profile", profile)?.putString("arr_${kind}_folder", folder)?.apply()
+        saveArr(kind, profile, folder)
         chooseAskArr(false)
     }
 
@@ -153,8 +194,9 @@ private fun SettingRow(label: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-fun SettingsScreen(onTab: (Tab) -> Unit, onSignOut: () -> Unit) {
+fun SettingsScreen(client: com.fancyfin.tv.data.JellyfinClient, onTab: (Tab) -> Unit, onSignOut: () -> Unit) {
     val context = LocalContext.current
+    var arrPicker by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
     // Back from Settings goes to Home (the menu's own Back handler still wins while the menu is open).
     androidx.activity.compose.BackHandler { onTab(Tab.Home) }
     Shell(Tab.Settings, onTab, onSignOut) { contentModifier ->
@@ -207,9 +249,44 @@ fun SettingsScreen(onTab: (Tab) -> Unit, onSignOut: () -> Unit) {
                     GlassButton("Off", { UiSettings.chooseUpNext(false) }, primary = !UiSettings.showUpNext)
                 }
 
+                Text("Playback", color = Palette.Text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+
+                SettingRow("Default audio language") {
+                    GlassButton(languageLabel(UiSettings.audioLang, "Automatic"), { UiSettings.chooseAudioLang(nextLanguage(UiSettings.audioLang, false)) })
+                }
+
+                SettingRow("Default subtitles") {
+                    GlassButton(
+                        if (UiSettings.subLang == "off") "Off" else languageLabel(UiSettings.subLang, "Automatic"),
+                        { UiSettings.chooseSubLang(nextLanguage(UiSettings.subLang, true)) },
+                    )
+                }
+
+                SettingRow("Highest quality to play (higher is converted by Jellyfin)") {
+                    MAX_QUALITY.forEach { (h, label) ->
+                        GlassButton(label, { UiSettings.chooseMaxHeight(h) }, primary = UiSettings.maxHeight == h)
+                    }
+                }
+
+                SettingRow("When a title has more than one copy") {
+                    GlassButton("Ask which", { UiSettings.chooseBestCopy(false) }, primary = !UiSettings.bestCopy)
+                    GlassButton("Play the best copy", { UiSettings.chooseBestCopy(true) }, primary = UiSettings.bestCopy)
+                }
+
+                Text("Radarr and Sonarr", color = Palette.Text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+
                 SettingRow("Ask for quality profile, folder and season when adding to Radarr / Sonarr") {
                     GlassButton("On", { UiSettings.chooseAskArr(true) }, primary = UiSettings.askArr)
                     GlassButton("Off", { UiSettings.chooseAskArr(false) }, primary = !UiSettings.askArr)
+                }
+
+                SettingRow("Default for movies (Radarr)") {
+                    GlassButton("Choose profile and folder…", { arrPicker = "movie" })
+                    Text(UiSettings.savedArr("movie")?.second ?: "Not set", color = Palette.TextMuted, fontSize = 12.sp)
+                }
+                SettingRow("Default for shows (Sonarr)") {
+                    GlassButton("Choose profile and folder…", { arrPicker = "series" })
+                    Text(UiSettings.savedArr("series")?.second ?: "Not set", color = Palette.TextMuted, fontSize = 12.sp)
                 }
 
                 SettingRow("Preview") {
@@ -227,6 +304,34 @@ fun SettingsScreen(onTab: (Tab) -> Unit, onSignOut: () -> Unit) {
                     GlassButton("Check for updates", { (context as? Activity)?.let { Updater.check(it, manual = true) } })
                 }
             }
+            arrPicker?.let { kind ->
+                ArrDialog(
+                    app = if (kind == "movie") "Radarr" else "Sonarr",
+                    kind = kind,
+                    tmdbId = null,
+                    client = client,
+                    onAdd = { profile, folder, _, _ ->
+                        UiSettings.saveArr(kind, profile, folder)
+                        arrPicker = null
+                    },
+                    onClose = { arrPicker = null },
+                )
+            }
         }
     }
+}
+
+private val LANGUAGES = listOf(
+    "" to "Automatic", "eng" to "English", "jpn" to "Japanese", "fra" to "French", "deu" to "German",
+    "spa" to "Spanish", "ita" to "Italian", "kor" to "Korean", "zho" to "Chinese",
+)
+
+private val MAX_QUALITY = listOf(0 to "Original", 2160 to "4K", 1080 to "1080p", 720 to "720p")
+
+private fun languageLabel(code: String, auto: String): String = LANGUAGES.firstOrNull { it.first == code }?.second ?: auto
+
+/** Cycle to the next language; subtitles also have "Off" after Automatic. */
+private fun nextLanguage(current: String, withOff: Boolean): String {
+    val order = if (withOff) listOf("", "off") + LANGUAGES.drop(1).map { it.first } else LANGUAGES.map { it.first }
+    return order[(order.indexOf(current).coerceAtLeast(0) + 1) % order.size]
 }

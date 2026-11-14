@@ -278,7 +278,7 @@ private fun TrackMenu(player: ExoPlayer, tick: Int, onClose: () -> Unit) {
  * Jellyfin so "Continue watching" stays right on every device.
  */
 @Composable
-fun PlayerScreen(item: Item, client: JellyfinClient, sourceId: String?, onDone: () -> Unit, onNext: (Item) -> Unit) {
+fun PlayerScreen(item: Item, client: JellyfinClient, sourceId: String?, maxHeight: Int?, onDone: () -> Unit, onNext: (Item) -> Unit) {
     var media by remember(item.id) { mutableStateOf<MediaInfo?>(null) }
     var nextEp by remember(item.id) { mutableStateOf<Item?>(null) }
     LaunchedEffect(item.id) {
@@ -294,7 +294,7 @@ fun PlayerScreen(item: Item, client: JellyfinClient, sourceId: String?, onDone: 
             Text("Loading…", color = Palette.TextMuted, fontSize = 14.sp)
         }
     } else {
-        PlayerBody(item, client, sourceId, loaded, nextEp, onDone, onNext)
+        PlayerBody(item, client, sourceId, maxHeight, loaded, nextEp, onDone, onNext)
     }
 }
 
@@ -304,6 +304,7 @@ private fun PlayerBody(
     item: Item,
     client: JellyfinClient,
     sourceId: String?,
+    maxHeight: Int?,
     media: MediaInfo,
     nextEp: Item?,
     onDone: () -> Unit,
@@ -312,7 +313,7 @@ private fun PlayerBody(
     val context = LocalContext.current
     val startMs = if (item.played) 0L else item.positionTicks / TICKS_PER_MS
     var info by remember { mutableStateOf("") }
-    var note by remember { mutableStateOf<String?>(null) }
+    var note by remember { mutableStateOf<String?>(if (maxHeight != null) "Playing at up to ${maxHeight}p (your quality limit in Settings)." else null) }
     var showInfo by remember { mutableStateOf(false) }
     var controls by remember { mutableStateOf(true) }
     var interaction by remember { mutableStateOf(0) }
@@ -334,7 +335,18 @@ private fun PlayerBody(
         // decoder take over when the first one refuses a stream.
         val factory = DefaultRenderersFactory(context).setEnableDecoderFallback(true)
         ExoPlayer.Builder(context, factory).build().apply {
-            val builder = MediaItem.Builder().setUri(client.directStreamUrl(item.id, sourceId))
+            val builder = MediaItem.Builder().setUri(
+                if (maxHeight != null) client.transcodeUrl(item.id, sourceId, maxHeight) else client.directStreamUrl(item.id, sourceId),
+            )
+            // Your default audio and subtitle language from Settings.
+            val tp = trackSelectionParameters.buildUpon()
+            if (UiSettings.audioLang.isNotEmpty()) tp.setPreferredAudioLanguage(UiSettings.audioLang)
+            when (UiSettings.subLang) {
+                "" -> {}
+                "off" -> tp.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                else -> tp.setPreferredTextLanguage(UiSettings.subLang)
+            }
+            trackSelectionParameters = tp.build()
             builder.setSubtitleConfigurations(
                 media.subtitles.map { s ->
                     MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(s.url))

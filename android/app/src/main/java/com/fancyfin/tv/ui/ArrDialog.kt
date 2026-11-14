@@ -44,7 +44,7 @@ import kotlinx.coroutines.delay
 fun ArrDialog(
     app: String,
     kind: String,
-    tmdbId: Int,
+    tmdbId: Int?,
     client: JellyfinClient,
     onAdd: (profile: Int, folder: String, season: Int?, remember: Boolean) -> Unit,
     onClose: () -> Unit,
@@ -87,7 +87,7 @@ fun ArrDialog(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text("Add to $app", color = Palette.Text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text(if (tmdbId == null) "Default for $app" else "Add to $app", color = Palette.Text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             val o = options
             when {
                 error != null -> {
@@ -131,11 +131,16 @@ fun ArrDialog(
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        GlassButton("Add", { onAdd(profile!!, folder!!, season, false) }, primary = true, compact = true)
-                        GlassButton("Add and remember", { onAdd(profile!!, folder!!, season, true) }, compact = true)
-                        GlassButton("Cancel", onClose, compact = true)
+                        if (tmdbId == null) {
+                            GlassButton("Save as default", { onAdd(profile!!, folder!!, null, false) }, primary = true, compact = true)
+                            GlassButton("Cancel", onClose, compact = true)
+                        } else {
+                            GlassButton("Add", { onAdd(profile!!, folder!!, season, false) }, primary = true, compact = true)
+                            GlassButton("Add and remember", { onAdd(profile!!, folder!!, season, true) }, compact = true)
+                            GlassButton("Cancel", onClose, compact = true)
+                        }
                     }
-                    Text("Remembering skips this next time (whole show for series). Turn it back on in Settings.", color = Palette.TextMuted, fontSize = 10.sp)
+                    if (tmdbId != null) Text("Remembering skips this next time (whole show for series). Turn it back on in Settings.", color = Palette.TextMuted, fontSize = 10.sp)
                 }
             }
         }

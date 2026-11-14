@@ -24,20 +24,30 @@ import com.fancyfin.tv.data.Item
 import com.fancyfin.tv.data.JellyfinClient
 import kotlinx.coroutines.delay
 
+/** The search box and its results, kept so Back from a title returns to them. */
+class SearchState {
+    var query by mutableStateOf("")
+    var results by mutableStateOf<List<Item>>(emptyList())
+    var status by mutableStateOf("Press the centre button on the box to type.")
+    var searched: String? = null
+}
+
 /** Type a title (centre button opens the keyboard) and the matching movies and shows appear. */
 @Composable
 fun SearchScreen(
+    state: SearchState,
     client: JellyfinClient,
     onOpen: (Item) -> Unit,
     onTab: (Tab) -> Unit,
     onSignOut: () -> Unit,
 ) {
-    var query by remember { mutableStateOf("") }
-    var results by remember { mutableStateOf<List<Item>>(emptyList()) }
-    var status by remember { mutableStateOf("Press the centre button on the box to type.") }
+    var query by state::query
+    var results by state::results
+    var status by state::status
 
     LaunchedEffect(query) {
         val q = query.trim()
+        if (q == state.searched && results.isNotEmpty()) return@LaunchedEffect
         if (q.length < 2) {
             results = emptyList()
             status = "Press the centre button on the box to type."
@@ -47,6 +57,7 @@ fun SearchScreen(
         status = "Searching…"
         try {
             results = client.search(q)
+            state.searched = q
             status = if (results.isEmpty()) "Nothing found for \"$q\"." else ""
         } catch (e: Exception) {
             status = "Couldn't reach your server."

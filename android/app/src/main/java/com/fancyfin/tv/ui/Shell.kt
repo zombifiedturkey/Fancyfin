@@ -60,13 +60,15 @@ object WallpaperState {
     var url by mutableStateOf<String?>(null)
 }
 
-enum class Tab(val label: String, val section: String) {
+enum class Tab(val label: String, val section: String, val inMenu: Boolean = true) {
+    Search("Search", "Browse"),
     Home("Home", "Browse"),
     Movies("Movies", "Browse"),
     Shows("TV Shows", "Browse"),
-    AllMovies("All movies", "Library"),
-    AllShows("All shows", "Library"),
-    Search("Search", "Library"),
+    Collections("Collections", "Browse"),
+    // Still reachable in code, no longer in the menu.
+    AllMovies("All movies", "Library", false),
+    AllShows("All shows", "Library", false),
     Settings("Settings", "System"),
 }
 
@@ -191,7 +193,7 @@ fun Shell(
             ) {
                 Text("Fancyfin", color = Palette.Text, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 6.dp))
                 var section = ""
-                Tab.values().forEach { tab ->
+                Tab.values().filter { it.inMenu }.forEach { tab ->
                     if (tab.section != section) {
                         section = tab.section
                         Text(
@@ -202,7 +204,7 @@ fun Shell(
                     MenuItem(
                         label = tab.label,
                         selected = tab == current,
-                        modifier = if (tab == current) Modifier.focusRequester(sidebarFocus) else Modifier,
+                        modifier = if (tab == Tab.Search) Modifier.focusRequester(sidebarFocus) else Modifier,
                         onClick = { onTab(tab) },
                     )
                 }

@@ -91,6 +91,26 @@ class HeroEntry(
     var status by mutableStateOf<String?>(null)
 }
 
+/**
+ * Everything a browse page needs to come back exactly as you left it: its rows, which tile you were on
+ * and how far it was scrolled. Kept by the app, so Back from a title lands on the same tile.
+ */
+class FeatureState {
+    var sections by mutableStateOf<List<HeroSection>>(emptyList())
+    var allItems by mutableStateOf<List<Item>>(emptyList())
+    var sortIndex by mutableStateOf(1)
+    var wallpaper by mutableStateOf<String?>(null)
+    var loading by mutableStateOf(true)
+    var failed by mutableStateOf(false)
+    /** False until a full load finishes, and again when something (like playing a title) makes it stale. */
+    var loaded = false
+    val selected = mutableStateMapOf<Int, Int>()
+    var focusRow by mutableStateOf(0)
+    var visited = false
+    val columnState = LazyListState()
+    val rowStates = HashMap<Int, LazyListState>()
+}
+
 /** A feature row: one big tile plus narrow ones. `mini` is the smaller version used for genres. */
 class HeroSection(
     val title: String,
@@ -214,6 +234,7 @@ internal fun ExitPrompt(onStay: () -> Unit, onClose: () -> Unit) {
 @Composable
 fun FeatureList(
     modifier: Modifier,
+    state: FeatureState,
     client: JellyfinClient,
     sections: List<HeroSection>,
     grid: GridSpec?,
@@ -226,18 +247,24 @@ fun FeatureList(
 ) {
     val scope = rememberCoroutineScope()
     var listFocused by remember { mutableStateOf(false) }
-    val selected = remember { mutableStateMapOf<Int, Int>() }
-    var focusRow by remember { mutableStateOf(0) }
-    val columnState = rememberLazyListState()
-    val rowStates = remember { HashMap<Int, LazyListState>() }
+    val selected = state.selected
+    var focusRow by state::focusRow
+    val columnState = state.columnState
+    val rowStates = state.rowStates
     val requesters = remember { HashMap<Int, HashMap<Int, FocusRequester>>() }
 
     LaunchedEffect(focusRow) { columnState.animateScrollToItem(focusRow) }
 
-    // Land on the first tile of the first row when the page opens.
+    // Land on the first tile of the first row when the page opens, or back on the tile you left.
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(250)
-        try { requesters[0]?.get(0)?.requestFocus() } catch (e: Exception) { /* not laid out yet */ }
+        val row = if (state.visited) focusRow.coerceIn(0, (sections.size - 1).coerceAtLeast(0)) else 0
+        val col = if (state.visited) selected[row] ?: 0 else 0
+        try {
+            requesters[row]?.get(col)?.requestFocus()
+        } catch (e: Exception) {
+            try { requesters[0]?.get(0)?.requestFocus() } catch (x: Exception) { /* not laid out yet */ }
+        }
     }
 
     // Back: first jump to the start of the row you're on; from there, ask whether to close the app.
@@ -278,6 +305,7 @@ fun FeatureList(
                         onSelect = { i ->
                             selected[si] = i
                             focusRow = si
+                            state.visited = true
                             val e = section.entries[i]
                             if (!e.isMore) onWallpaper(wallpaperFor(e))
                             if (e.onServer == null && e.kind == "movie" && e.tmdbId != null && e.status == null) {
@@ -331,6 +359,7 @@ fun FeatureList(
 @Composable
 fun BrowseScreen(
     tab: Tab,
+    state: FeatureState,
     client: JellyfinClient,
     onOpen: (Item) -> Unit,
     onPlay: (Item) -> Unit,
@@ -342,10 +371,10 @@ fun BrowseScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var askExit by remember { mutableStateOf(false) }
-    var sections by remember(tab) { mutableStateOf<List<HeroSection>>(emptyList()) }
-    var loading by remember(tab) { mutableStateOf(true) }
-    var failed by remember(tab) { mutableStateOf(false) }
-    var wallpaper by remember(tab) { mutableStateOf<String?>(null) }
+    var sections by state::sections
+    var loading by state::loading
+    var failed by state::failed
+    var wallpaper by state::wallpaper
     var message by remember(tab) { mutableStateOf<String?>(null) }
 
     val types = when (tab) {
@@ -355,6 +384,10 @@ fun BrowseScreen(
     }
 
     LaunchedEffect(tab) {
+        if (state.loaded) return@LaunchedEffect
+        val fresh = sections.isEmpty()
+        val acc = ArrayList<HeroSection>()
+        fun add(section: HeroSection) { acc.add(section); if (fresh) sections = acc.toList() }
         val trendingKind = when (tab) {
             Tab.Movies -> "movie"
             Tab.Shows -> "tv"
@@ -375,32 +408,34 @@ fun BrowseScreen(
                 else -> "Popular right now"
             }
             if (popular.isNotEmpty()) {
-                sections = sections + HeroSection(popularTitle, popular)
+                add(HeroSection(popularTitle, popular))
                 val first = popular.first()
-                wallpaper = if (first.backdrop?.contains("image.tmdb.org") == true) smallTmdb(first.backdrop) else first.onServer?.let { client.backdrop(it, 96) }
+                if (fresh) wallpaper = if (first.backdrop?.contains("image.tmdb.org") == true) smallTmdb(first.backdrop) else first.onServer?.let { client.backdrop(it, 96) }
             }
             loading = false
 
             val resume = client.resume().filter { if (tab == Tab.Movies) it.isMovie else if (tab == Tab.Shows) it.isEpisode else true }
-            if (resume.isNotEmpty()) sections = sections + HeroSection("Continue watching", resume.map { itemEntry(it, client) }, playDirect = true)
+            if (resume.isNotEmpty()) add(HeroSection("Continue watching", resume.map { itemEntry(it, client) }, playDirect = true))
 
             if (tab != Tab.Movies && UiSettings.showUpNext) {
                 val resumeIds = resume.map { it.id }.toSet()
                 val next = client.nextUp().filter { it.id !in resumeIds }
-                if (next.isNotEmpty()) sections = sections + HeroSection("Up next", next.map { itemEntry(it, client) })
+                if (next.isNotEmpty()) add(HeroSection("Up next", next.map { itemEntry(it, client) }))
             }
 
             val recent = client.library(types, "DateCreated", true, limit = 15)
-            if (recent.isNotEmpty()) sections = sections + HeroSection("Recently added", recent.map { itemEntry(it, client) })
+            if (recent.isNotEmpty()) add(HeroSection("Recently added", recent.map { itemEntry(it, client) }))
 
             val onServerGenres = client.genres(types).associateBy { it.lowercase() }
             val chosen = POPULAR_GENRES.mapNotNull { onServerGenres[it.lowercase()] }.take(8)
             for (genre in chosen) {
                 val found = client.byGenre(genre, types, 10)
                 if (found.size >= 4) {
-                    sections = sections + HeroSection(genre, found.map { itemEntry(it, client) } + moreEntry(genre), mini = true, genre = genre)
+                    add(HeroSection(genre, found.map { itemEntry(it, client) } + moreEntry(genre), mini = true, genre = genre))
                 }
             }
+            if (!fresh) sections = acc.toList()
+            state.loaded = true
         } catch (e: Exception) {
             if (sections.isEmpty()) failed = true
         }
@@ -416,6 +451,7 @@ fun BrowseScreen(
                 else -> key(tab) {
                     FeatureList(
                         modifier = contentModifier,
+                        state = state,
                         client = client,
                         sections = sections,
                         grid = null,
@@ -449,6 +485,7 @@ fun BrowseScreen(
 fun GenreScreen(
     genre: String,
     types: String,
+    state: FeatureState,
     client: JellyfinClient,
     onOpen: (Item) -> Unit,
     onPlay: (Item) -> Unit,
@@ -458,12 +495,12 @@ fun GenreScreen(
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    var sections by remember(genre) { mutableStateOf<List<HeroSection>>(emptyList()) }
-    var allItems by remember(genre) { mutableStateOf<List<Item>>(emptyList()) }
-    var sortIndex by remember(genre) { mutableStateOf(1) }
-    var loading by remember(genre) { mutableStateOf(true) }
-    var failed by remember(genre) { mutableStateOf(false) }
-    var wallpaper by remember(genre) { mutableStateOf<String?>(null) }
+    var sections by state::sections
+    var allItems by state::allItems
+    var sortIndex by state::sortIndex
+    var loading by state::loading
+    var failed by state::failed
+    var wallpaper by state::wallpaper
     var message by remember(genre) { mutableStateOf<String?>(null) }
 
     val sorts = listOf(Triple("Date released", "PremiereDate", true), Triple("Date added", "DateCreated", true), Triple("Alphabetical", "SortName", false))
@@ -474,6 +511,10 @@ fun GenreScreen(
     }
 
     LaunchedEffect(genre) {
+        if (state.loaded) return@LaunchedEffect
+        val fresh = sections.isEmpty()
+        val acc = ArrayList<HeroSection>()
+        fun add(section: HeroSection) { acc.add(section); if (fresh) sections = acc.toList() }
         try {
             val index = try { client.serverIndex() } catch (e: Exception) { emptyMap() }
             val everything = client.genreLibrary(genre, types, "SortName", false)
@@ -484,18 +525,20 @@ fun GenreScreen(
                 everything.sortedByDescending { it.rating ?: 0.0 }.take(15).map { itemEntry(it, client) }
             }
             if (popularEntries.isNotEmpty()) {
-                sections = sections + HeroSection("Popular in $genre", popularEntries)
+                add(HeroSection("Popular in $genre", popularEntries))
                 val first = popularEntries.first()
-                wallpaper = if (first.backdrop?.contains("image.tmdb.org") == true) smallTmdb(first.backdrop) else first.onServer?.let { client.backdrop(it, 96) }
+                if (fresh) wallpaper = if (first.backdrop?.contains("image.tmdb.org") == true) smallTmdb(first.backdrop) else first.onServer?.let { client.backdrop(it, 96) }
             }
             loading = false
 
             val ids = everything.map { it.id }.toSet()
             val resume = client.resume().filter { it.id in ids || (it.seriesId != null && it.seriesId in ids) }
-            if (resume.isNotEmpty()) sections = sections + HeroSection("Continue watching", resume.map { itemEntry(it, client) }, playDirect = true)
+            if (resume.isNotEmpty()) add(HeroSection("Continue watching", resume.map { itemEntry(it, client) }, playDirect = true))
 
             val recent = client.genreLibrary(genre, types, "DateCreated", true, 15)
-            if (recent.isNotEmpty()) sections = sections + HeroSection("Recently added", recent.map { itemEntry(it, client) })
+            if (recent.isNotEmpty()) add(HeroSection("Recently added", recent.map { itemEntry(it, client) }))
+            if (!fresh) sections = acc.toList()
+            state.loaded = true
         } catch (e: Exception) {
             if (sections.isEmpty()) failed = true
         }
@@ -520,6 +563,7 @@ fun GenreScreen(
                 else -> key(genre) {
                     FeatureList(
                         modifier = contentModifier,
+                        state = state,
                         client = client,
                         sections = sections,
                         grid = GridSpec(allItems, sorts.map { it.first }, sortIndex) { sortIndex = it },
