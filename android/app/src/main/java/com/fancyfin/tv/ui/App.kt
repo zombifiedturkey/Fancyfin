@@ -104,7 +104,18 @@ fun FancyfinApp() {
                     TitleScreen(route.ref, client, play, openTitle, showTrailer) { p -> stack.add(Route.Person(PersonRef(p.id, p.name, p.photo))) }
                 }
                 is Route.Person -> androidx.compose.runtime.key(route.ref) { PersonScreen(route.ref, client, openTitle) }
-                is Route.Play -> PlayerScreen(route.item, client, route.sourceId, back)
+                is Route.Play -> androidx.compose.runtime.key(route.item.id) {
+                    PlayerScreen(route.item, client, route.sourceId, back) { next ->
+                        // Autoplay: swap this player for the next episode's.
+                        scope.launch {
+                            val versions = try { client.versions(next) } catch (e: Exception) { emptyList() }
+                            if (stack.lastOrNull() == route) {
+                                stack.removeAt(stack.lastIndex)
+                                stack.add(Route.Play(next, versions.firstOrNull()?.sourceId))
+                            }
+                        }
+                    }
+                }
             }
 
             if (askExit) ExitPrompt(onStay = { askExit = false }, onClose = { (context as? android.app.Activity)?.finish() })

@@ -18,6 +18,25 @@ import java.net.URL
 import java.net.URLEncoder
 
 /** A popular title from TMDB, which may or may not be on your server. */
+/** A stretch of a video with a meaning: an intro, recap, credits and so on. */
+class Segment(val type: String, val startMs: Long, val endMs: Long)
+
+class Chapter(val name: String, val startMs: Long)
+
+/** A subtitle file that sits beside the video (not inside it). */
+class ExternalSub(val url: String, val mime: String, val language: String?, val title: String)
+
+/** Preview pictures for the seek bar: sheets of small frames, one every intervalMs. */
+class Trickplay(val width: Int, val height: Int, val tileW: Int, val tileH: Int, val intervalMs: Long, val count: Int)
+
+/** What the player needs to know about a video beyond the file itself. */
+class MediaInfo(
+    val chapters: List<Chapter> = emptyList(),
+    val segments: List<Segment> = emptyList(),
+    val subtitles: List<ExternalSub> = emptyList(),
+    val trickplay: Trickplay? = null,
+)
+
 /** A trailer, teaser, clip or behind-the-scenes video on YouTube. */
 data class Video(val key: String, val name: String, val type: String, val official: Boolean)
 
@@ -490,6 +509,99 @@ class JellyfinClient(private val prefs: Prefs) {
         val sorted = JSONArray()
         dated.forEach { sorted.put(it.second) }
         parseTmdb(sorted, "movie")
+    }
+
+    // ---- Playback extras ---------------------------------------------------------------------
+
+    /** Chapters, intro/credits markers, sidecar subtitles and seek-bar previews for a video. Never throws. */
+    suspend fun mediaInfo(id: String, sourceId: String?): MediaInfo = withContext(Dispatchers.IO) {
+        val json = try { JSONObject(request(server, "/Users/$userId/Items/$id")) } catch (e: Exception) { return@withContext MediaInfo() }
+
+        val chapters = ArrayList<Chapter>()
+        json.optJSONArray("Chapters")?.let {
+            for (i in 0 until it.length()) {
+                val c = it.getJSONObject(i)
+                chapters.add(Chapter(c.optString("Name"), c.optLong("StartPositionTicks") / 10_000))
+            }
+        }
+
+        var source: JSONObject? = null
+        json.optJSONArray("MediaSources")?.let {
+            for (i in 0 until it.length()) {
+                val candidate = it.getJSONObject(i)
+                if (source == null) source = candidate
+                if (candidate.optString("Id") == sourceId) { source = candidate; break }
+            }
+        }
+        val subtitles = ArrayList<ExternalSub>()
+        val src = source
+        src?.optJSONArray("MediaStreams")?.let {
+            for (i in 0 until it.length()) {
+                val st = it.getJSONObject(i)
+                if (st.optString("Type") != "Subtitle" || !st.optBoolean("IsExternal")) continue
+                val codec = st.optString("Codec").lowercase()
+                val (ext, mime) = when (codec) {
+                    "srt", "subrip" -> "srt" to "application/x-subrip"
+                    "ass", "ssa" -> "ass" to "text/x-ssa"
+                    "vtt", "webvtt" -> "vtt" to "text/vtt"
+                    else -> continue
+                }
+                val url = "$server/Videos/$id/${src.optString("Id", id)}/Subtitles/${st.optInt("Index")}/Stream.$ext?api_key=$token"
+                val title = st.optString("DisplayTitle").ifEmpty { st.optString("Title") }.ifEmpty { "Subtitles" }
+                subtitles.add(ExternalSub(url, mime, st.optString("Language").takeIf { l -> l.isNotEmpty() }, title))
+            }
+        }
+
+        var trickplay: Trickplay? = null
+        json.optJSONObject("Trickplay")?.let { bySource ->
+            val widths = bySource.optJSONObject(sourceId ?: id)
+                ?: bySource.keys().asSequence().firstOrNull()?.let { k -> bySource.optJSONObject(k) }
+            if (widths != null) {
+                val best = widths.keys().asSequence().mapNotNull { k -> widths.optJSONObject(k) }
+                    .minByOrNull { o -> Math.abs(o.optInt("Width") - 320) }
+                if (best != null && best.optInt("Width") > 0 && best.optInt("Interval") > 0) {
+                    trickplay = Trickplay(
+                        best.optInt("Width"), best.optInt("Height"), best.optInt("TileWidth", 10), best.optInt("TileHeight", 10),
+                        best.optLong("Interval"), best.optInt("ThumbnailCount"),
+                    )
+                }
+            }
+        }
+
+        val segments = ArrayList<Segment>()
+        try {
+            val list = JSONObject(request(server, "/MediaSegments/$id")).optJSONArray("Items")
+            if (list != null) {
+                for (i in 0 until list.length()) {
+                    val seg = list.getJSONObject(i)
+                    segments.add(Segment(seg.optString("Type"), seg.optLong("StartTicks") / 10_000, seg.optLong("EndTicks") / 10_000))
+                }
+            }
+        } catch (e: Exception) {
+            // Older servers have no segments; chapter names are the fallback below.
+        }
+        if (segments.none { it.type == "Intro" || it.type == "Outro" }) {
+            val introName = Regex("(?i)^(intro|opening|title sequence|theme)")
+            val outroName = Regex("(?i)(credits|ending|outro)")
+            for (i in chapters.indices) {
+                val end = chapters.getOrNull(i + 1)?.startMs ?: Long.MAX_VALUE
+                if (introName.containsMatchIn(chapters[i].name)) segments.add(Segment("Intro", chapters[i].startMs, end))
+                if (outroName.containsMatchIn(chapters[i].name)) segments.add(Segment("Outro", chapters[i].startMs, end))
+            }
+        }
+        MediaInfo(chapters, segments, subtitles, trickplay)
+    }
+
+    fun trickplayUrl(id: String, sourceId: String?, width: Int, sheet: Int): String =
+        "$server/Videos/$id/Trickplay/$width/$sheet.jpg?MediaSourceId=${sourceId ?: id}&api_key=$token"
+
+    /** The episode after this one, across seasons (specials are skipped), or null. */
+    suspend fun nextEpisode(item: Item): Item? {
+        val seriesId = item.seriesId ?: return null
+        val all = items(get("/Shows/$seriesId/Episodes?UserId=$userId&Fields=$fields"))
+            .filter { (it.parentIndexNumber ?: 1) != 0 || item.parentIndexNumber == 0 }
+        val at = all.indexOfFirst { it.id == item.id }
+        return if (at >= 0 && at + 1 < all.size) all[at + 1] else null
     }
 
     // ---- Radarr and Sonarr (through the Fancyfin container) -----------------------------------
