@@ -101,7 +101,7 @@ private fun describeAudio(f: Format?): String? {
  * Jellyfin so "Continue watching" stays right on every device.
  */
 @Composable
-fun PlayerScreen(item: Item, client: JellyfinClient, onDone: () -> Unit) {
+fun PlayerScreen(item: Item, client: JellyfinClient, sourceId: String?, onDone: () -> Unit) {
     val context = LocalContext.current
     val startMs = if (item.played) 0L else item.positionTicks / TICKS_PER_MS
     var info by remember { mutableStateOf("") }
@@ -115,7 +115,7 @@ fun PlayerScreen(item: Item, client: JellyfinClient, onDone: () -> Unit) {
         // decoder take over when the first one refuses a stream.
         val factory = DefaultRenderersFactory(context).setEnableDecoderFallback(true)
         ExoPlayer.Builder(context, factory).build().apply {
-            setMediaItem(MediaItem.fromUri(client.directStreamUrl(item.id)), startMs)
+            setMediaItem(MediaItem.fromUri(client.directStreamUrl(item.id, sourceId)), startMs)
             playWhenReady = true
             prepare()
         }
@@ -151,7 +151,7 @@ fun PlayerScreen(item: Item, client: JellyfinClient, onDone: () -> Unit) {
                 fellBack = true
                 note = "Your TV couldn't play the original, so Jellyfin is converting it (HDR and Atmos may be lost)."
                 val at = player.currentPosition
-                player.setMediaItem(MediaItem.fromUri(client.transcodeUrl(item.id)), at)
+                player.setMediaItem(MediaItem.fromUri(client.transcodeUrl(item.id, sourceId)), at)
                 player.prepare()
                 player.playWhenReady = true
             }

@@ -34,6 +34,8 @@ data class Item(
     val unplayedCount: Int?,
     val childCount: Int?,
     val tmdbId: String?,
+    /** Other copies of the same movie or show on the server (other folders), folded into this one. */
+    val duplicateIds: List<String> = emptyList(),
 ) {
     val isEpisode: Boolean get() = type == "Episode"
     val isSeries: Boolean get() = type == "Series"
@@ -118,4 +120,145 @@ fun parseItems(array: JSONArray?): List<Item> {
         if (entry.has("Id")) out.add(parseItem(entry))
     }
     return out
+}
+
+/** One playable copy of a movie: a file with its own picture, sound and size. */
+data class MediaVersion(
+    val item: Item,
+    val sourceId: String,
+    val resolution: String,
+    val range: String,
+    val audio: String,
+    val codec: String,
+    val container: String,
+    val sizeBytes: Long,
+    val fileName: String,
+)
+
+private fun resolutionLabel(width: Int, height: Int): String = when {
+    width >= 3200 || height >= 2000 -> "2160p (4K)"
+    width >= 1800 || height >= 1000 -> "1080p"
+    width >= 1200 || height >= 700 -> "720p"
+    height > 0 -> "${height}p"
+    else -> "Unknown"
+}
+
+private fun rangeLabel(video: JSONObject?): String {
+    if (video == null) return "SDR"
+    val type = video.optString("VideoRangeType").uppercase()
+    val title = video.optString("DisplayTitle")
+    return when {
+        type.startsWith("DOVI") || title.contains("Dolby Vision", true) ->
+            if (type.contains("HDR10")) "Dolby Vision / HDR10" else "Dolby Vision"
+        type == "HDR10PLUS" -> "HDR10+"
+        type == "HDR10" -> "HDR10"
+        type == "HLG" -> "HLG"
+        video.optString("VideoRange").equals("HDR", true) -> "HDR"
+        else -> "SDR"
+    }
+}
+
+private fun audioLabel(audio: JSONObject?): String {
+    if (audio == null) return "No audio"
+    val codec = audio.optString("Codec").lowercase()
+    val profile = audio.optString("Profile")
+    val title = audio.optString("DisplayTitle")
+    val spatial = audio.optString("AudioSpatialFormat")
+    val atmos = spatial.contains("Atmos", true) || profile.contains("Atmos", true) || title.contains("Atmos", true)
+    val dtsx = spatial.contains("DTSX", true) || profile.contains("DTS:X", true) || title.contains("DTS:X", true)
+    val name = when {
+        codec == "truehd" -> if (atmos) "Dolby TrueHD Atmos" else "Dolby TrueHD"
+        codec == "eac3" -> if (atmos) "Dolby Atmos" else "Dolby Digital Plus"
+        codec == "ac3" -> "Dolby Digital"
+        codec == "dts" -> when {
+            dtsx -> "DTS:X"
+            profile.contains("MA", true) -> "DTS-HD MA"
+            profile.contains("HRA", true) -> "DTS-HD HRA"
+            else -> "DTS"
+        }
+        codec == "aac" -> "AAC"
+        codec == "flac" -> "FLAC"
+        codec == "opus" -> "Opus"
+        codec.startsWith("pcm") -> "PCM"
+        else -> codec.uppercase()
+    }
+    val channels = when (audio.optInt("Channels")) {
+        8 -> "7.1"
+        7 -> "6.1"
+        6 -> "5.1"
+        2 -> "2.0"
+        1 -> "1.0"
+        else -> audio.optString("ChannelLayout")
+    }
+    return if (channels.isNotEmpty()) "$name $channels" else name
+}
+
+fun parseVersions(item: Item, json: JSONObject): List<MediaVersion> {
+    val sources = json.optJSONArray("MediaSources") ?: return emptyList()
+    val out = ArrayList<MediaVersion>()
+    for (i in 0 until sources.length()) {
+        val source = sources.getJSONObject(i)
+        val streams = source.optJSONArray("MediaStreams")
+        var video: JSONObject? = null
+        val audios = ArrayList<JSONObject>()
+        if (streams != null) {
+            for (j in 0 until streams.length()) {
+                val st = streams.getJSONObject(j)
+                when (st.optString("Type")) {
+                    "Video" -> if (video == null) video = st
+                    "Audio" -> audios.add(st)
+                }
+            }
+        }
+        val bestAudio = audios.firstOrNull { it.optBoolean("IsDefault") } ?: audios.maxByOrNull { it.optInt("Channels") }
+        val vCodec = when (video?.optString("Codec")?.lowercase()) {
+            "hevc", "h265" -> "HEVC"
+            "h264", "avc" -> "H.264"
+            "av1" -> "AV1"
+            "vp9" -> "VP9"
+            null -> ""
+            else -> video?.optString("Codec")?.uppercase().orEmpty()
+        }
+        val path = source.optString("Path")
+        out.add(
+            MediaVersion(
+                item = item,
+                sourceId = source.getString("Id"),
+                resolution = resolutionLabel(video?.optInt("Width") ?: 0, video?.optInt("Height") ?: 0),
+                range = rangeLabel(video),
+                audio = audioLabel(bestAudio),
+                codec = vCodec,
+                container = source.optString("Container").uppercase(),
+                sizeBytes = source.optLong("Size"),
+                fileName = path.substringAfterLast('/').substringAfterLast('\\'),
+            ),
+        )
+    }
+    return out
+}
+
+/**
+ * Folds copies of the same movie or show (the same TMDB id, or failing that the same name and year)
+ * into one entry, keeping the order of the first copy. The other copies' ids are kept on it.
+ */
+fun consolidate(items: List<Item>): List<Item> {
+    val groups = LinkedHashMap<String, MutableList<Item>>()
+    var loose = 0
+    for (item in items) {
+        val key = when {
+            !(item.isMovie || item.isSeries) -> "x${loose++}"
+            item.tmdbId != null -> "${item.type}:t${item.tmdbId}"
+            item.year != null -> "${item.type}:n${item.name.lowercase().trim()}:${item.year}"
+            else -> "x${loose++}"
+        }
+        groups.getOrPut(key) { ArrayList() }.add(item)
+    }
+    return groups.values.map { group ->
+        if (group.size == 1) {
+            group[0]
+        } else {
+            val rep = group.firstOrNull { it.primaryTag != null } ?: group[0]
+            rep.copy(duplicateIds = group.filter { it.id != rep.id }.map { it.id })
+        }
+    }
 }

@@ -174,11 +174,12 @@ class JellyfinClient(private val prefs: Prefs) {
 
     private fun items(json: String): List<Item> {
         val trimmed = json.trim()
-        return if (trimmed.startsWith("[")) {
+        val parsed = if (trimmed.startsWith("[")) {
             parseItems(JSONArray(trimmed))
         } else {
             parseItems(JSONObject(trimmed).optJSONArray("Items"))
         }
+        return consolidate(parsed)
     }
 
     suspend fun resume(): List<Item> =
@@ -220,7 +221,19 @@ class JellyfinClient(private val prefs: Prefs) {
         )
     }
 
-    suspend fun item(id: String): Item = parseItem(JSONObject(get("/Users/$userId/Items/$id")))
+    /** One item in full. Pass the copies folded into it so they aren't lost. */
+    suspend fun item(id: String, duplicates: List<String> = emptyList()): Item =
+        parseItem(JSONObject(get("/Users/$userId/Items/$id"))).copy(duplicateIds = duplicates)
+
+    /** Every playable copy of this item, across its duplicates and any merged versions. */
+    suspend fun versions(item: Item): List<MediaVersion> {
+        val out = ArrayList<MediaVersion>()
+        for (id in listOf(item.id) + item.duplicateIds) {
+            val json = JSONObject(get("/Users/$userId/Items/$id"))
+            out.addAll(parseVersions(parseItem(json), json))
+        }
+        return out
+    }
 
     suspend fun seasons(seriesId: String): List<Item> =
         items(get("/Shows/$seriesId/Seasons?UserId=$userId&Fields=$fields"))
@@ -370,11 +383,12 @@ class JellyfinClient(private val prefs: Prefs) {
     }
 
     /** A transcoded stream, used only when the TV can't play the original file. */
-    fun transcodeUrl(id: String): String =
-        "$server/Videos/$id/main.m3u8?MediaSourceId=$id&DeviceId=${prefs.deviceId}" +
+    fun transcodeUrl(id: String, sourceId: String? = null): String =
+        "$server/Videos/$id/main.m3u8?MediaSourceId=${sourceId ?: id}&DeviceId=${prefs.deviceId}" +
             "&PlaySessionId=${java.util.UUID.randomUUID()}&VideoCodec=hevc,h264&AudioCodec=eac3,ac3,aac" +
             "&TranscodingMaxAudioChannels=6&MaxStreamingBitrate=120000000&SegmentContainer=ts" +
             "&BreakOnNonKeyFrames=True&api_key=$token"
 
-    fun directStreamUrl(id: String): String = "$server/Videos/$id/stream?static=true&api_key=$token"
+    fun directStreamUrl(id: String, sourceId: String? = null): String =
+        "$server/Videos/$id/stream?static=true&api_key=$token" + if (sourceId != null) "&MediaSourceId=$sourceId" else ""
 }

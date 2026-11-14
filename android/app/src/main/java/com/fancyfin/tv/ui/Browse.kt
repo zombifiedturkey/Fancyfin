@@ -186,10 +186,10 @@ fun BrowseScreen(
             // The rest, added as they arrive.
             val resume = client.resume().filter { if (tab == Tab.Movies) it.isMovie else if (tab == Tab.Shows) it.isEpisode else true }
             if (resume.isNotEmpty()) sections = sections + Section("Continue watching", heroes = resume.map { resumeEntry(it, client) })
-            if (tab != Tab.Movies) {
+            if (tab != Tab.Movies && UiSettings.showUpNext) {
                 val resumeIds = resume.map { it.id }.toSet()
                 val next = client.nextUp().filter { it.id !in resumeIds }
-                if (next.isNotEmpty()) sections = sections + Section("Up next", items = next, landscape = true)
+                if (next.isNotEmpty()) sections = sections + Section("Up next", heroes = next.map { resumeEntry(it, client) })
             }
             val recent = client.library(types, "DateCreated", true, limit = 20)
             if (recent.isNotEmpty()) sections = sections + Section("Recently added", items = recent)
@@ -229,7 +229,8 @@ fun BrowseScreen(
                                 if (section.heroes != null) {
                                     HeroRow(
                                         entries = section.heroes,
-                                        selected = selected[sectionIndex] ?: 0,
+                                        // Only the row you're on opens its big tile; the others stay narrow.
+                                        expandedIndex = if (sectionIndex == focusSection) selected[sectionIndex] ?: 0 else null,
                                         onSelect = { i ->
                                             selected[sectionIndex] = i
                                             focusSection = sectionIndex
@@ -241,7 +242,7 @@ fun BrowseScreen(
                                                 message = "“${e.title}” isn't on your server yet."
                                             } else if (server.isMovie || server.isEpisode) {
                                                 scope.launch {
-                                                    try { onPlay(client.item(server.id)) } catch (x: Exception) { onOpen(server) }
+                                                    try { onPlay(client.item(server.id, server.duplicateIds)) } catch (x: Exception) { onOpen(server) }
                                                 }
                                             } else {
                                                 onOpen(server)
@@ -313,14 +314,14 @@ private fun CardRow(section: Section, client: JellyfinClient, onOpen: (Item) -> 
 @Composable
 private fun HeroRow(
     entries: List<HeroEntry>,
-    selected: Int,
+    expandedIndex: Int?,
     onSelect: (Int) -> Unit,
     onClick: (HeroEntry) -> Unit,
     onLongClick: (HeroEntry) -> Unit,
 ) {
     val listState = rememberLazyListState()
-    LaunchedEffect(selected) {
-        listState.animateScrollToItem((selected - 1).coerceAtLeast(0))
+    LaunchedEffect(expandedIndex) {
+        if (expandedIndex != null) listState.animateScrollToItem((expandedIndex - 1).coerceAtLeast(0))
     }
     CompositionLocalProvider(LocalBringIntoViewSpec provides NoAutoScroll) {
         LazyRow(
@@ -329,7 +330,7 @@ private fun HeroRow(
             contentPadding = PaddingValues(horizontal = 48.dp),
         ) {
             itemsIndexed(entries) { index, entry ->
-                HeroTile(entry, expanded = index == selected, onFocused = { onSelect(index) }, onClick = { onClick(entry) }, onLongClick = { onLongClick(entry) })
+                HeroTile(entry, expanded = index == expandedIndex, onFocused = { onSelect(index) }, onClick = { onClick(entry) }, onLongClick = { onLongClick(entry) })
             }
         }
     }

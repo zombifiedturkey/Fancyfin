@@ -50,7 +50,7 @@ fun DetailScreen(
 
     LaunchedEffect(start.id) {
         try {
-            item = client.item(start.id)
+            item = client.item(start.id, start.duplicateIds)
         } catch (e: Exception) {
             // Keep what we were given.
         }
@@ -141,7 +141,7 @@ fun DetailScreen(
                             scope.launch {
                                 try {
                                     client.setPlayed(item.id, next)
-                                    item = client.item(item.id)
+                                    item = client.item(item.id, item.duplicateIds)
                                 } catch (e: Exception) {
                                     // Leave the button as it was.
                                 }
@@ -155,7 +155,7 @@ fun DetailScreen(
                             scope.launch {
                                 try {
                                     client.setFavorite(item.id, next)
-                                    item = client.item(item.id)
+                                    item = client.item(item.id, item.duplicateIds)
                                 } catch (e: Exception) {
                                     // Leave the button as it was.
                                 }

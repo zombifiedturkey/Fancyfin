@@ -43,6 +43,8 @@ object UiSettings {
         private set
     var posterBorder by mutableStateOf(true)
         private set
+    var showUpNext by mutableStateOf(true)
+        private set
 
     private var prefs: SharedPreferences? = null
 
@@ -51,11 +53,17 @@ object UiSettings {
         prefs = p
         corner = Corner.values().firstOrNull { it.name == p.getString("ui_corner", null) } ?: Corner.Light
         posterBorder = p.getBoolean("ui_poster_border", true)
+        showUpNext = p.getBoolean("ui_up_next", true)
     }
 
     fun chooseCorner(value: Corner) {
         corner = value
         prefs?.edit()?.putString("ui_corner", value.name)?.apply()
+    }
+
+    fun chooseUpNext(value: Boolean) {
+        showUpNext = value
+        prefs?.edit()?.putBoolean("ui_up_next", value)?.apply()
     }
 
     fun choosePosterBorder(value: Boolean) {
@@ -94,6 +102,11 @@ fun SettingsScreen(onTab: (Tab) -> Unit, onSignOut: () -> Unit) {
                 SettingRow("Border around posters") {
                     GlassButton("On", { UiSettings.choosePosterBorder(true) }, primary = UiSettings.posterBorder)
                     GlassButton("Off", { UiSettings.choosePosterBorder(false) }, primary = !UiSettings.posterBorder)
+                }
+
+                SettingRow("Up next row on the home screen") {
+                    GlassButton("On", { UiSettings.chooseUpNext(true) }, primary = UiSettings.showUpNext)
+                    GlassButton("Off", { UiSettings.chooseUpNext(false) }, primary = !UiSettings.showUpNext)
                 }
 
                 SettingRow("Preview") {
