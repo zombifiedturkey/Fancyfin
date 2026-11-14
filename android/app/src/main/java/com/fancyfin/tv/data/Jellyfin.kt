@@ -17,6 +17,19 @@ import java.net.NetworkInterface
 import java.net.URL
 import java.net.URLEncoder
 
+/** A popular title from TMDB, which may or may not be on your server. */
+data class Discover(
+    val tmdbId: Int,
+    val kind: String,
+    val title: String,
+    val overview: String?,
+    val year: Int?,
+    val rating: Double?,
+    val genres: List<String>,
+    val backdrop: String?,
+    val poster: String?,
+)
+
 class ApiException(message: String, val code: Int = 0) : IOException(message)
 
 /** Talks to a Jellyfin server over its REST API. All calls run off the main thread. */
@@ -157,7 +170,7 @@ class JellyfinClient(private val prefs: Prefs) {
 
     // ---- Browsing ----------------------------------------------------------------------------
 
-    private val fields = "Overview,Taglines,Genres,ParentBackdropItemId,ParentBackdropImageTags,ParentLogoItemId,ParentLogoImageTag"
+    private val fields = "Overview,Taglines,Genres,ParentBackdropItemId,ParentBackdropImageTags,ParentLogoItemId,ParentLogoImageTag,ProviderIds"
 
     private fun items(json: String): List<Item> {
         val trimmed = json.trim()
@@ -217,6 +230,92 @@ class JellyfinClient(private val prefs: Prefs) {
 
     suspend fun similar(id: String): List<Item> =
         items(get("/Items/$id/Similar?UserId=$userId&Limit=16&Fields=$fields"))
+
+    // ---- Discover (TMDB through Fancyfin) ----------------------------------------------------
+
+    private var genreNames: Map<String, String>? = null
+
+    private fun tmdbImage(path: String?, size: String): String? =
+        if (path.isNullOrEmpty()) null else "https://image.tmdb.org/t/p/$size$path"
+
+    /** What's popular this week on TMDB. kind is "all", "movie" or "tv". Null when TMDB isn't set up in Fancyfin. */
+    suspend fun trending(kind: String): List<Discover>? = withContext(Dispatchers.IO) {
+        if (genreNames == null) {
+            val names = HashMap<String, String>()
+            for (k in listOf("movie", "tv")) {
+                try {
+                    val genres = JSONObject(request(fancyfin, "/tmdb/genre/$k/list")).optJSONArray("genres")
+                    if (genres != null) {
+                        for (i in 0 until genres.length()) {
+                            val g = genres.getJSONObject(i)
+                            names[g.getInt("id").toString()] = g.getString("name")
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Names are a nicety.
+                }
+            }
+            genreNames = names
+        }
+        val body = try {
+            request(fancyfin, "/tmdb/trending/$kind/week")
+        } catch (e: ApiException) {
+            if (e.code == 404) return@withContext null else throw e
+        }
+        val results = JSONObject(body).optJSONArray("results") ?: return@withContext emptyList()
+        val out = ArrayList<Discover>()
+        for (i in 0 until results.length()) {
+            val r = results.getJSONObject(i)
+            val type = r.optString("media_type", if (kind == "tv") "tv" else "movie")
+            if (type != "movie" && type != "tv") continue
+            val date = r.optString(if (type == "movie") "release_date" else "first_air_date")
+            val ids = r.optJSONArray("genre_ids")
+            val genres = ArrayList<String>()
+            if (ids != null) {
+                for (j in 0 until ids.length()) genreNames?.get(ids.getInt(j).toString())?.let { genres.add(it) }
+            }
+            out.add(
+                Discover(
+                    tmdbId = r.getInt("id"),
+                    kind = type,
+                    title = r.optString(if (type == "movie") "title" else "name"),
+                    overview = r.optString("overview").takeIf { it.isNotEmpty() },
+                    year = date.take(4).toIntOrNull(),
+                    rating = if (r.optDouble("vote_average", 0.0) > 0) r.getDouble("vote_average") else null,
+                    genres = genres.take(3),
+                    backdrop = tmdbImage(r.optString("backdrop_path").takeIf { it != "null" }, "w1280"),
+                    poster = tmdbImage(r.optString("poster_path").takeIf { it != "null" }, "w342"),
+                ),
+            )
+        }
+        out
+    }
+
+    /** Everything on the server, keyed "movie:<tmdb id>" or "tv:<tmdb id>", to tell what is already here. */
+    suspend fun serverIndex(): Map<String, Item> {
+        val all = items(
+            get(
+                "/Users/$userId/Items?Recursive=true&IncludeItemTypes=Movie,Series&Fields=ProviderIds" +
+                    "&EnableImages=false&EnableUserData=false&EnableTotalRecordCount=false",
+            ),
+        )
+        val out = HashMap<String, Item>()
+        for (item in all) {
+            val id = item.tmdbId ?: continue
+            out[(if (item.isMovie) "movie:" else "tv:") + id] = item
+        }
+        return out
+    }
+
+    /** Genre names on the server for these types ("Movie", "Series" or "Movie,Series"). */
+    suspend fun genres(types: String): List<String> {
+        val json = JSONObject(get("/Genres?UserId=$userId&IncludeItemTypes=$types&SortBy=SortName"))
+        val array = json.optJSONArray("Items") ?: return emptyList()
+        return (0 until array.length()).map { array.getJSONObject(it).optString("Name") }
+    }
+
+    suspend fun byGenre(genre: String, types: String, limit: Int = 20): List<Item> =
+        library(types, "CommunityRating", true, "&Genres=" + URLEncoder.encode(genre, "UTF-8"), limit)
 
     // ---- Actions -----------------------------------------------------------------------------
 

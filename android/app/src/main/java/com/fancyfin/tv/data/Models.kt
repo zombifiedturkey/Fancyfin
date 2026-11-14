@@ -33,6 +33,7 @@ data class Item(
     val favorite: Boolean,
     val unplayedCount: Int?,
     val childCount: Int?,
+    val tmdbId: String?,
 ) {
     val isEpisode: Boolean get() = type == "Episode"
     val isSeries: Boolean get() = type == "Series"
@@ -105,6 +106,7 @@ fun parseItem(o: JSONObject): Item {
         favorite = user?.optBoolean("IsFavorite") ?: false,
         unplayedCount = user?.intOrNull("UnplayedItemCount"),
         childCount = o.intOrNull("ChildCount"),
+        tmdbId = o.optJSONObject("ProviderIds")?.str("Tmdb"),
     )
 }
 

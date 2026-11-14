@@ -57,7 +57,7 @@ fun LibraryScreen(
     onTab: (Tab) -> Unit,
     onSignOut: () -> Unit,
 ) {
-    val shows = if (tab == Tab.Movies) MOVIE_SHOWS else SHOW_SHOWS
+    val shows = if (tab == Tab.AllMovies) MOVIE_SHOWS else SHOW_SHOWS
     var sortIndex by remember(tab) { mutableStateOf(0) }
     var showIndex by remember(tab) { mutableStateOf(0) }
     var items by remember(tab) { mutableStateOf<List<Item>>(emptyList()) }
@@ -68,7 +68,7 @@ fun LibraryScreen(
         try {
             val sort = SORTS[sortIndex]
             items = client.library(
-                if (tab == Tab.Movies) "Movie" else "Series",
+                if (tab == Tab.AllMovies) "Movie" else "Series",
                 sort.by,
                 sort.descending,
                 shows[showIndex].extra,
@@ -79,34 +79,35 @@ fun LibraryScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Palette.Background)) {
-        Column(Modifier.fillMaxSize()) {
-            TopBar(tab, onTab, onSignOut)
-            Row(
-                Modifier.padding(start = 48.dp, top = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                GlassButton("Sort: " + SORTS[sortIndex].label, { sortIndex = (sortIndex + 1) % SORTS.size })
-                GlassButton("Show: " + shows[showIndex].label, { showIndex = (showIndex + 1) % shows.size })
-                val count = if (status.isEmpty()) "${items.size} titles" else status
-                Text(count, color = Palette.TextMuted, fontSize = 12.sp, modifier = Modifier.padding(start = 6.dp, top = 10.dp))
-            }
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(8),
-                contentPadding = PaddingValues(start = 48.dp, end = 48.dp, top = 16.dp, bottom = 32.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                items(items) { item ->
-                    ItemCard(
-                        item = item,
-                        client = client,
-                        width = 96.dp,
-                        height = 144.dp,
-                        landscape = false,
-                        onClick = { onOpen(item) },
-                    )
+    Shell(tab, onTab, onSignOut) { contentModifier ->
+        Box(Modifier.fillMaxSize().background(Palette.Background)) {
+            Column(contentModifier.fillMaxSize()) {
+                Row(
+                    Modifier.padding(start = 48.dp, top = 22.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    GlassButton("Sort: " + SORTS[sortIndex].label, { sortIndex = (sortIndex + 1) % SORTS.size })
+                    GlassButton("Show: " + shows[showIndex].label, { showIndex = (showIndex + 1) % shows.size })
+                    val count = if (status.isEmpty()) "${items.size} titles" else status
+                    Text(count, color = Palette.TextMuted, fontSize = 12.sp, modifier = Modifier.padding(start = 6.dp, top = 10.dp))
+                }
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(8),
+                    contentPadding = PaddingValues(start = 48.dp, end = 48.dp, top = 16.dp, bottom = 32.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    items(items) { item ->
+                        ItemCard(
+                            item = item,
+                            client = client,
+                            width = 96.dp,
+                            height = 144.dp,
+                            landscape = false,
+                            onClick = { onOpen(item) },
+                        )
+                    }
                 }
             }
         }

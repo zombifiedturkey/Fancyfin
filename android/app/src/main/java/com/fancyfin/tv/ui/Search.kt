@@ -53,22 +53,23 @@ fun SearchScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Palette.Background)) {
-        Column(Modifier.fillMaxSize()) {
-            TopBar(Tab.Search, onTab, onSignOut)
-            Column(Modifier.padding(start = 48.dp, top = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Field("Search movies and shows", query, { query = it }, wide = true)
-                if (status.isNotEmpty()) Text(status, color = Palette.TextMuted, fontSize = 12.sp)
-            }
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(8),
-                contentPadding = PaddingValues(start = 48.dp, end = 48.dp, top = 16.dp, bottom = 32.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                items(results) { item ->
-                    ItemCard(item, client, 96.dp, 144.dp, false, onClick = { onOpen(item) })
+    Shell(Tab.Search, onTab, onSignOut) { contentModifier ->
+        Box(Modifier.fillMaxSize().background(Palette.Background)) {
+            Column(contentModifier.fillMaxSize()) {
+                Column(Modifier.padding(start = 48.dp, top = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Field("Search movies and shows", query, { query = it }, wide = true)
+                    if (status.isNotEmpty()) Text(status, color = Palette.TextMuted, fontSize = 12.sp)
+                }
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(8),
+                    contentPadding = PaddingValues(start = 48.dp, end = 48.dp, top = 16.dp, bottom = 32.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    items(results) { item ->
+                        ItemCard(item, client, 96.dp, 144.dp, false, onClick = { onOpen(item) })
+                    }
                 }
             }
         }

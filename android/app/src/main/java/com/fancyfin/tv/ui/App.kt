@@ -59,9 +59,9 @@ fun FancyfinApp() {
 
             when (val route = stack.last()) {
                 is Route.Main -> when (route.tab) {
-                    Tab.Home -> HomeScreen(client, open, goTab, signOut)
+                    Tab.Home, Tab.Movies, Tab.Shows -> BrowseScreen(route.tab, client, open, play, goTab, signOut)
                     Tab.Search -> SearchScreen(client, open, goTab, signOut)
-                    else -> LibraryScreen(route.tab, client, open, goTab, signOut)
+                    Tab.AllMovies, Tab.AllShows -> LibraryScreen(route.tab, client, open, goTab, signOut)
                 }
                 is Route.Detail -> DetailScreen(route.item, client, play, open)
                 is Route.Play -> PlayerScreen(route.item, client, back)
