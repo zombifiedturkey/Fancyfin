@@ -53,12 +53,12 @@ object UiSettings {
         posterBorder = p.getBoolean("ui_poster_border", true)
     }
 
-    fun setCorner(value: Corner) {
+    fun chooseCorner(value: Corner) {
         corner = value
         prefs?.edit()?.putString("ui_corner", value.name)?.apply()
     }
 
-    fun setPosterBorder(value: Boolean) {
+    fun choosePosterBorder(value: Boolean) {
         posterBorder = value
         prefs?.edit()?.putBoolean("ui_poster_border", value)?.apply()
     }
@@ -87,13 +87,13 @@ fun SettingsScreen(onTab: (Tab) -> Unit, onSignOut: () -> Unit) {
 
                 SettingRow("Window corners") {
                     Corner.values().forEach { c ->
-                        GlassButton(c.label, { UiSettings.setCorner(c) }, primary = c == UiSettings.corner)
+                        GlassButton(c.label, { UiSettings.chooseCorner(c) }, primary = c == UiSettings.corner)
                     }
                 }
 
                 SettingRow("Border around posters") {
-                    GlassButton("On", { UiSettings.setPosterBorder(true) }, primary = UiSettings.posterBorder)
-                    GlassButton("Off", { UiSettings.setPosterBorder(false) }, primary = !UiSettings.posterBorder)
+                    GlassButton("On", { UiSettings.choosePosterBorder(true) }, primary = UiSettings.posterBorder)
+                    GlassButton("Off", { UiSettings.choosePosterBorder(false) }, primary = !UiSettings.posterBorder)
                 }
 
                 SettingRow("Preview") {
