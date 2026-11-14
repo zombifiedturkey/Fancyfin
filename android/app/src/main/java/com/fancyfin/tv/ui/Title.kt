@@ -35,10 +35,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.IntOffset
+import com.fancyfin.tv.data.ApiException
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -222,7 +233,8 @@ fun TitleScreen(
     val year = shown?.year ?: t?.year
     val rating = shown?.rating ?: t?.rating
     val minutes = shown?.runtimeMinutes?.takeIf { it > 0 } ?: t?.runtimeMinutes ?: 0
-    val backdrop = shown?.let { client.backdrop(it) } ?: t?.backdrop ?: ref.backdrop
+    val hero = shown?.let { client.backdrop(it) } ?: (t?.backdrop ?: ref.backdrop)?.replace("/w1280/", "/original/")
+    val posterUrl = shown?.let { client.poster(it, 342) } ?: t?.poster ?: ref.poster
     val trailers = t?.let { trailerKeys(it.videos) } ?: emptyList()
 
     // Pages open at the top, with the cast row at the bottom of the screen. Going down from the buttons to
@@ -241,7 +253,27 @@ fun TitleScreen(
     val best = versions.maxWithOrNull(compareBy<MediaVersion>({ resolutionHeight(it) }, { rangeRank(it) }, { it.sizeBytes }))
 
     Box(Modifier.fillMaxSize()) {
-        Backdrop(backdrop)
+        // The accent gradient, with the movie's big picture across the top fading into it. The picture
+        // scrolls away with the page.
+        Backdrop(null)
+        if (hero != null) {
+            val scrolled = if (listState.firstVisibleItemIndex == 0) listState.firstVisibleItemScrollOffset else 100000
+            Box(
+                Modifier.fillMaxWidth().height(340.dp)
+                    .offset { IntOffset(0, -scrolled) }
+                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                    .drawWithContent {
+                        drawContent()
+                        drawRect(
+                            Brush.verticalGradient(0f to Color.Black, 0.45f to Color.Black, 1f to Color.Transparent),
+                            blendMode = BlendMode.DstIn,
+                        )
+                    },
+            ) {
+                AsyncImage(model = hero, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Color(0xB0000000), 0.55f to Color(0x30000000), 1f to Color.Transparent)))
+            }
+        }
 
         CompositionLocalProvider(LocalBringIntoViewSpec provides NoAutoScroll) {
             LazyColumn(
@@ -252,29 +284,36 @@ fun TitleScreen(
             ) {
                 var n = 0
 
-                // What it is on the left; how it will look and sound (or when it's out) on the right.
+                // Poster, then what it is, then how it will look and sound (or when it's out).
                 val headerIndex = n++
                 item {
-                    Row(Modifier.padding(horizontal = 24.dp).then(track(headerIndex)), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
-                        Column(Modifier.width(500.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Row(Modifier.padding(horizontal = 24.dp).then(track(headerIndex)), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                        Box(
+                            Modifier.width(100.dp).height(150.dp)
+                                .clip(RoundedCornerShape(UiSettings.corner.card))
+                                .background(Palette.GlassFill),
+                        ) {
+                            if (posterUrl != null) AsyncImage(model = posterUrl, contentDescription = title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        }
+                        Column(Modifier.width(430.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             val logo = shown?.let { client.logo(it) }
                             if (logo != null) {
                                 AsyncImage(
                                     model = logo, contentDescription = title, contentScale = ContentScale.Fit,
-                                    alignment = Alignment.CenterStart, modifier = Modifier.height(64.dp).width(300.dp),
+                                    alignment = Alignment.CenterStart, modifier = Modifier.height(60.dp).width(300.dp),
                                 )
                             } else {
-                                Text(title, color = Palette.Text, fontSize = 30.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Text(title, color = Palette.Text, fontSize = 28.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             }
-                            val meta = listOfNotNull(
-                                year?.toString(), shown?.officialRating, runtimeText(minutes), rating?.let { "★ " + "%.1f".format(it) },
-                            )
-                            if (meta.isNotEmpty()) Text(meta.joinToString("   ·   "), color = Palette.TextMuted, fontSize = 12.sp)
-                            if (genres.isNotEmpty()) Text(genres.take(4).joinToString(", "), color = Palette.TextMuted, fontSize = 12.sp)
-                            tagline?.let { Text(it, color = Palette.Accent, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                            overview?.let { Text(it, color = Palette.TextMuted, fontSize = 13.sp, maxLines = 4, overflow = TextOverflow.Ellipsis) }
+                            tagline?.let { Text(it, color = Palette.TextMuted, fontSize = 12.sp, fontStyle = FontStyle.Italic, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                listOfNotNull(
+                                    year?.toString(), shown?.officialRating, runtimeText(minutes), rating?.let { "★ " + "%.1f".format(it) },
+                                ).plus(genres.take(3)).forEach { Chip(it) }
+                            }
+                            overview?.let { Text(it, color = Palette.Text, fontSize = 12.sp, maxLines = 3, overflow = TextOverflow.Ellipsis) }
                         }
-                        Column(Modifier.width(300.dp).padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Column(Modifier.width(250.dp).padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             if (ref.server != null) {
                                 if (best != null) {
                                     Text("QUALITY", color = Palette.TextMuted, fontSize = 10.sp, letterSpacing = 1.2.sp)
@@ -322,9 +361,6 @@ fun TitleScreen(
                         if (ref.server == null) {
                             // Becomes "Add to Radarr / Sonarr" once the arr flow is in.
                             GlassButton("Not on your server", {}, modifier = lead(), clear = true)
-                        }
-                        if (trailers.isNotEmpty()) {
-                            GlassButton("Trailer", { onTrailer(trailers) }, modifier = lead())
                         }
                         if (shown != null) {
                             GlassButton(
@@ -386,30 +422,26 @@ fun TitleScreen(
                             SectionTitle("Cast")
                             HRow(defaultSpec, spacing = 14.dp) {
                                 items(t.cast) { p ->
-                                    FocusBox(
-                                        onClick = { onPerson(p) },
-                                        modifier = Modifier.width(108.dp).height(156.dp),
-                                        edge = UiSettings.posterBorder,
-                                    ) { _ ->
-                                        Column(
-                                            Modifier.fillMaxSize()
-                                                .background(Palette.GlassFill)
-                                                .background(Palette.Accent.copy(alpha = 0.10f))
-                                                .padding(horizontal = 6.dp, vertical = 10.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                                        ) {
-                                            Box(Modifier.size(62.dp).clip(CircleShape).background(Palette.GlassFillStrong)) {
-                                                if (p.photo != null) AsyncImage(model = p.photo, contentDescription = p.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                                            }
-                                            Text(
-                                                p.name, color = Palette.Text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-                                                textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                                            )
-                                            p.role?.let {
-                                                Text(it, color = Palette.TextMuted, fontSize = 10.sp, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                    Column(Modifier.width(96.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        FocusBox(
+                                            onClick = { onPerson(p) },
+                                            modifier = Modifier.width(96.dp).height(138.dp),
+                                            edge = UiSettings.posterBorder,
+                                        ) { _ ->
+                                            Box(Modifier.fillMaxSize().background(Palette.Accent.copy(alpha = 0.25f))) {
+                                                if (p.photo != null) {
+                                                    AsyncImage(model = p.photo, contentDescription = p.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                                                } else {
+                                                    Text(
+                                                        p.name.split(" ").filter { it.isNotEmpty() }.take(2).joinToString("") { it.first().uppercase() },
+                                                        color = Palette.Text, fontSize = 22.sp, fontWeight = FontWeight.Bold,
+                                                        modifier = Modifier.align(Alignment.Center),
+                                                    )
+                                                }
                                             }
                                         }
+                                        Text(p.name, color = Palette.Text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        p.role?.let { Text(it, color = Palette.TextMuted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                                     }
                                 }
                             }
@@ -495,6 +527,15 @@ fun TitleScreen(
     }
 }
 
+@Composable
+private fun Chip(text: String) {
+    val pill = RoundedCornerShape(50)
+    Text(
+        text, color = Palette.Text, fontSize = 10.sp, maxLines = 1,
+        modifier = Modifier.background(Palette.GlassFill, pill).border(1.dp, Palette.GlassEdge, pill).padding(horizontal = 8.dp, vertical = 3.dp),
+    )
+}
+
 private fun resolutionHeight(v: MediaVersion): Int = Regex("\\d+").find(v.resolution)?.value?.toIntOrNull() ?: 0
 
 private fun rangeRank(v: MediaVersion): Int = when {
@@ -536,11 +577,21 @@ fun PersonScreen(
     var info by remember { mutableStateOf<com.fancyfin.tv.data.PersonInfo?>(null) }
     var index by remember { mutableStateOf<Map<String, Item>>(emptyMap()) }
     var loaded by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
     val first = remember { FocusRequester() }
 
     LaunchedEffect(ref.id) {
         index = try { client.serverIndex() } catch (e: Exception) { emptyMap() }
-        info = try { client.person(ref.id) } catch (e: Exception) { null }
+        info = try {
+            client.person(ref.id)
+        } catch (e: Exception) {
+            error = if (e is ApiException && e.code == 404) {
+                "Fancyfin can't look up people yet. Update your Fancyfin container to the latest image."
+            } else {
+                "Couldn't load this bio: " + (e.message ?: "unknown error")
+            }
+            null
+        }
         loaded = true
     }
     LaunchedEffect(loaded) {
@@ -573,6 +624,7 @@ fun PersonScreen(
                         val bio = info?.biography
                         when {
                             bio != null -> Text(bio, color = Palette.TextMuted, fontSize = 13.sp, maxLines = 12, overflow = TextOverflow.Ellipsis)
+                            error != null -> Text(error!!, color = Palette.Accent, fontSize = 13.sp)
                             loaded -> Text("No biography available.", color = Palette.TextMuted, fontSize = 13.sp)
                             else -> Text("Loading…", color = Palette.TextMuted, fontSize = 13.sp)
                         }

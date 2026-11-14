@@ -48,7 +48,8 @@ private fun page(key: String) = """
 var player;
 function onYouTubeIframeAPIReady(){
   player=new YT.Player('p',{width:'100%',height:'100%',videoId:'$key',
-    playerVars:{autoplay:1,controls:1,rel:0,modestbranding:1,playsinline:1,fs:0,iv_load_policy:3,cc_load_policy:0},
+    host:'https://www.youtube.com',
+    playerVars:{autoplay:1,controls:1,rel:0,modestbranding:1,playsinline:1,fs:0,iv_load_policy:3,cc_load_policy:0,origin:'https://com.fancyfin.tv',enablejsapi:1},
     events:{
       onReady:function(e){Android.ready();e.target.playVideo();},
       onError:function(e){Android.failed(e.data);},
@@ -64,11 +65,11 @@ function seek(s){if(!player)return;player.seekTo(player.getCurrentTime()+s,true)
 class TrailerBridge(
     private val main: Handler,
     private val onReady: () -> Unit,
-    private val onFailed: () -> Unit,
+    private val onFailed: (Int) -> Unit,
     private val onEnded: () -> Unit,
 ) {
     @JavascriptInterface fun ready() { main.post { onReady() } }
-    @JavascriptInterface fun failed(code: Int) { main.post { onFailed() } }
+    @JavascriptInterface fun failed(code: Int) { main.post { onFailed(code) } }
     @JavascriptInterface fun ended() { main.post { onEnded() } }
 }
 
@@ -100,18 +101,31 @@ fun TrailerPlayer(keys: List<String>, onClose: () -> Unit) {
     var web by remember { mutableStateOf<WebView?>(null) }
     var ready by remember { mutableStateOf(false) }
     var hint by remember { mutableStateOf(true) }
+    var message by remember { mutableStateOf<String?>("Loading trailer…") }
     val main = remember { Handler(Looper.getMainLooper()) }
 
     BackHandler { onClose() }
 
+    var skipping by remember { mutableStateOf<String?>(null) }
+
     fun next() {
         if (index + 1 < keys.size) {
             ready = false
+            message = "Trying the next trailer…"
             index += 1
         } else {
             openInYouTube(context, keys[0])
             onClose()
         }
+    }
+
+    // Say why a trailer failed for a moment before moving on, so there's something to report.
+    LaunchedEffect(skipping) {
+        val why = skipping ?: return@LaunchedEffect
+        message = why
+        delay(2500)
+        skipping = null
+        next()
     }
 
     LaunchedEffect(Unit) {
@@ -122,10 +136,12 @@ fun TrailerPlayer(keys: List<String>, onClose: () -> Unit) {
     }
     LaunchedEffect(index, web) {
         val view = web ?: return@LaunchedEffect
-        view.loadDataWithBaseURL("https://www.youtube.com/", page(keys[index]), "text/html", "utf-8", null)
+        message = "Loading trailer…"
+        // YouTube only embeds for pages that say who they are; the app's id works as the referrer.
+        view.loadDataWithBaseURL("https://com.fancyfin.tv/", page(keys[index]), "text/html", "utf-8", null)
         // If the player never reports in, move on rather than sit on a black screen.
         delay(15_000)
-        if (!ready) next()
+        if (!ready) skipping = "YouTube didn't respond (timed out)."
     }
     Box(
         Modifier
@@ -156,9 +172,15 @@ fun TrailerPlayer(keys: List<String>, onClose: () -> Unit) {
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
                     settings.mediaPlaybackRequiresUserGesture = false
-                    webViewClient = WebViewClient()
+                    webViewClient = object : WebViewClient() {
+                        override fun onReceivedError(view: WebView, request: android.webkit.WebResourceRequest, error: android.webkit.WebResourceError) {
+                            if (request.isForMainFrame || request.url.toString().contains("iframe_api")) {
+                                main.post { skipping = "Couldn't load the player: " + error.description }
+                            }
+                        }
+                    }
                     addJavascriptInterface(
-                        TrailerBridge(main, { ready = true }, { next() }, { onClose() }),
+                        TrailerBridge(main, { ready = true; message = null }, { code -> skipping = "YouTube won't embed this video (code $code)." }, { onClose() }),
                         "Android",
                     )
                     web = this
@@ -166,7 +188,13 @@ fun TrailerPlayer(keys: List<String>, onClose: () -> Unit) {
             },
             onRelease = { it.destroy() },
         )
-        if (hint) {
+        message?.let {
+            Text(
+                it, color = Palette.Text, fontSize = 13.sp,
+                modifier = Modifier.align(Alignment.Center).background(Color(0xB3000000)).padding(horizontal = 14.dp, vertical = 8.dp),
+            )
+        }
+        if (hint && ready) {
             Text(
                 "OK  pause / play        ◀ ▶  skip 10s        Back  close",
                 color = Palette.Text, fontSize = 12.sp,

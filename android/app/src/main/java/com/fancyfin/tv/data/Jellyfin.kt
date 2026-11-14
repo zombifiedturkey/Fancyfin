@@ -388,7 +388,7 @@ class JellyfinClient(private val prefs: Prefs) {
         r.optJSONObject("credits")?.optJSONArray("cast")?.let {
             for (i in 0 until minOf(it.length(), 20)) {
                 val c = it.getJSONObject(i)
-                cast.add(Person(c.optInt("id"), c.optString("name"), c.optString("character").takeIf { s -> s.isNotEmpty() }, tmdbImage(c.optString("profile_path").takeIf { s -> s != "null" }, "w185")))
+                cast.add(Person(c.optInt("id"), c.optString("name"), c.optString("character").takeIf { s -> s.isNotEmpty() }, tmdbImage(c.optString("profile_path").takeIf { s -> s != "null" }, "w342")))
             }
         }
         val rec = r.optJSONObject("recommendations")?.optJSONArray("results")
@@ -420,9 +420,8 @@ class JellyfinClient(private val prefs: Prefs) {
     /** One person from TMDB with their credits. Null when TMDB isn't set up. */
     suspend fun person(id: Int): PersonInfo? = withContext(Dispatchers.IO) {
         loadGenres()
-        val body = try {
-            request(fancyfin, "/tmdb/person/$id?append_to_response=combined_credits")
-        } catch (e: ApiException) { return@withContext null }
+        // Errors go up so the page can say what went wrong (a Fancyfin container that predates people lookups gives a 404).
+        val body = request(fancyfin, "/tmdb/person/$id?append_to_response=combined_credits")
         val r = JSONObject(body)
         val cast = r.optJSONObject("combined_credits")?.optJSONArray("cast")
         val picked = ArrayList<JSONObject>()
