@@ -83,9 +83,12 @@ fun GlassButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     primary: Boolean = false,
+    clear: Boolean = false,
+    onFocused: () -> Unit = {},
 ) {
     FocusBox(
         onClick = onClick,
+        onFocused = onFocused,
         modifier = modifier.height(36.dp),
         shape = RoundedCornerShape(UiSettings.corner.button),
         focusedScale = 1.06f,
@@ -94,6 +97,7 @@ fun GlassButton(
             primary && focused -> Palette.Accent
             primary -> Palette.Accent.copy(alpha = 0.85f)
             focused -> Palette.GlassFillStrong
+            clear -> Color.White.copy(alpha = 0.06f)
             else -> Palette.GlassFill
         }
         Box(Modifier.fillMaxHeight().background(fill).padding(horizontal = 18.dp), contentAlignment = Alignment.Center) {

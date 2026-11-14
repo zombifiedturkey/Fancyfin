@@ -247,39 +247,41 @@ class JellyfinClient(private val prefs: Prefs) {
     // ---- Discover (TMDB through Fancyfin) ----------------------------------------------------
 
     private var genreNames: Map<String, String>? = null
+    private var genreIds: Map<String, Map<String, Int>>? = null
 
     private fun tmdbImage(path: String?, size: String): String? =
         if (path.isNullOrEmpty()) null else "https://image.tmdb.org/t/p/$size$path"
 
-    /** What's popular this week on TMDB. kind is "all", "movie" or "tv". Null when TMDB isn't set up in Fancyfin. */
-    suspend fun trending(kind: String): List<Discover>? = withContext(Dispatchers.IO) {
-        if (genreNames == null) {
-            val names = HashMap<String, String>()
-            for (k in listOf("movie", "tv")) {
-                try {
-                    val genres = JSONObject(request(fancyfin, "/tmdb/genre/$k/list")).optJSONArray("genres")
-                    if (genres != null) {
-                        for (i in 0 until genres.length()) {
-                            val g = genres.getJSONObject(i)
-                            names[g.getInt("id").toString()] = g.getString("name")
-                        }
+    /** TMDB's genre lists, so ids can be shown as names and names looked up as ids. */
+    private fun loadGenres() {
+        if (genreNames != null) return
+        val names = HashMap<String, String>()
+        val ids = HashMap<String, Map<String, Int>>()
+        for (k in listOf("movie", "tv")) {
+            val byName = HashMap<String, Int>()
+            try {
+                val genres = JSONObject(request(fancyfin, "/tmdb/genre/$k/list")).optJSONArray("genres")
+                if (genres != null) {
+                    for (i in 0 until genres.length()) {
+                        val g = genres.getJSONObject(i)
+                        names[g.getInt("id").toString()] = g.getString("name")
+                        byName[g.getString("name").lowercase()] = g.getInt("id")
                     }
-                } catch (e: Exception) {
-                    // Names are a nicety.
                 }
+            } catch (e: Exception) {
+                // Names are a nicety.
             }
-            genreNames = names
+            ids[k] = byName
         }
-        val body = try {
-            request(fancyfin, "/tmdb/trending/$kind/week")
-        } catch (e: ApiException) {
-            if (e.code == 404) return@withContext null else throw e
-        }
-        val results = JSONObject(body).optJSONArray("results") ?: return@withContext emptyList()
+        genreNames = names
+        genreIds = ids
+    }
+
+    private fun parseTmdb(results: JSONArray, defaultKind: String): List<Discover> {
         val out = ArrayList<Discover>()
         for (i in 0 until results.length()) {
             val r = results.getJSONObject(i)
-            val type = r.optString("media_type", if (kind == "tv") "tv" else "movie")
+            val type = r.optString("media_type", defaultKind)
             if (type != "movie" && type != "tv") continue
             val date = r.optString(if (type == "movie") "release_date" else "first_air_date")
             val ids = r.optJSONArray("genre_ids")
@@ -300,6 +302,55 @@ class JellyfinClient(private val prefs: Prefs) {
                     poster = tmdbImage(r.optString("poster_path").takeIf { it != "null" }, "w342"),
                 ),
             )
+        }
+        return out
+    }
+
+    /** What's popular this week on TMDB. kind is "all", "movie" or "tv". Null when TMDB isn't set up in Fancyfin. */
+    suspend fun trending(kind: String): List<Discover>? = withContext(Dispatchers.IO) {
+        loadGenres()
+        val body = try {
+            request(fancyfin, "/tmdb/trending/$kind/week")
+        } catch (e: ApiException) {
+            if (e.code == 404) return@withContext null else throw e
+        }
+        parseTmdb(JSONObject(body).optJSONArray("results") ?: return@withContext emptyList(), if (kind == "tv") "tv" else "movie")
+    }
+
+    /** TMDB uses a few different genre names for TV. */
+    private val tvAlias = mapOf(
+        "action" to "action & adventure", "adventure" to "action & adventure",
+        "science fiction" to "sci-fi & fantasy", "fantasy" to "sci-fi & fantasy", "war" to "war & politics",
+    )
+
+    /**
+     * The most popular titles in one genre, on your server or not. types is "Movie", "Series" or both;
+     * with both, movies and shows are mixed. Null when TMDB isn't set up in Fancyfin.
+     */
+    suspend fun popularInGenre(genre: String, types: String): List<Discover>? = withContext(Dispatchers.IO) {
+        loadGenres()
+        val kinds = ArrayList<String>()
+        if (types.contains("Movie")) kinds.add("movie")
+        if (types.contains("Series")) kinds.add("tv")
+        val lists = ArrayList<List<Discover>>()
+        for (kind in kinds) {
+            val key = genre.lowercase()
+            val id: Int? = genreIds?.get(kind)?.get(key)
+                ?: (if (kind == "tv") genreIds?.get(kind)?.get(tvAlias[key] ?: "") else null)
+            if (id == null) continue
+            val body = try {
+                request(fancyfin, "/tmdb/discover/$kind?with_genres=$id&sort_by=popularity.desc&vote_count.gte=100")
+            } catch (e: ApiException) {
+                if (e.code == 404) return@withContext null else throw e
+            }
+            lists.add(parseTmdb(JSONObject(body).optJSONArray("results") ?: continue, kind))
+        }
+        // Take turns between movies and shows.
+        val out = ArrayList<Discover>()
+        var n = 0
+        while (out.size < 20 && lists.any { n < it.size }) {
+            for (l in lists) if (n < l.size) out.add(l[n])
+            n++
         }
         out
     }
@@ -328,7 +379,10 @@ class JellyfinClient(private val prefs: Prefs) {
     }
 
     suspend fun byGenre(genre: String, types: String, limit: Int = 20): List<Item> =
-        library(types, "CommunityRating", true, "&Genres=" + URLEncoder.encode(genre, "UTF-8"), limit)
+        genreLibrary(genre, types, "CommunityRating", true, limit)
+
+    suspend fun genreLibrary(genre: String, types: String, sort: String, descending: Boolean, limit: Int = 3000): List<Item> =
+        library(types, sort, descending, "&Genres=" + URLEncoder.encode(genre, "UTF-8"), limit)
 
     // ---- Actions -----------------------------------------------------------------------------
 

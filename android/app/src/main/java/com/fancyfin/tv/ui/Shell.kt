@@ -13,6 +13,8 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,12 +32,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -61,14 +65,15 @@ enum class Tab(val label: String, val section: String) {
 }
 
 /**
- * The wallpaper. It is given a small picture and stretched to fill the screen, which blurs it without
- * any blur effect (the Shield's Android version has none), then darkened so text stays readable.
+ * The wallpaper: a small picture stretched to fill the screen, which blurs it without any blur effect
+ * (the Shield's Android version has none), then darkened so text stays readable. Or, if you've chosen
+ * it in Settings, a gradient built from your accent colour.
  */
 @Composable
 fun Backdrop(url: String?) {
     Box(Modifier.fillMaxSize().background(Palette.Background)) {
-        Crossfade(targetState = url, label = "backdrop") { target ->
-            if (target != null) {
+        if (UiSettings.backgroundPicture && url != null) {
+            Crossfade(targetState = url, label = "backdrop") { target ->
                 AsyncImage(
                     model = target,
                     contentDescription = null,
@@ -76,8 +81,21 @@ fun Backdrop(url: String?) {
                     modifier = Modifier.fillMaxSize(),
                 )
             }
+            Box(Modifier.fillMaxSize().background(Color(0xB307080B)))
+        } else {
+            val accent = Palette.Accent
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.linearGradient(
+                        listOf(
+                            lerp(Palette.Background, accent, 0.42f),
+                            lerp(Palette.Background, accent, 0.14f),
+                            Palette.Background,
+                        ),
+                    ),
+                ),
+            )
         }
-        Box(Modifier.fillMaxSize().background(Color(0xB307080B)))
         Box(
             Modifier.fillMaxSize().background(
                 Brush.verticalGradient(0f to Color(0x4007080B), 1f to Color(0xF207080B)),
@@ -132,12 +150,17 @@ fun Shell(
             enter = slideInHorizontally { -it } + fadeIn(),
             exit = slideOutHorizontally { -it } + fadeOut(),
         ) {
+            val panel = RoundedCornerShape(UiSettings.corner.tile.coerceAtLeast(0.dp))
             Column(
                 Modifier
-                    .width(210.dp)
+                    .padding(14.dp)
+                    .width(220.dp)
                     .fillMaxHeight()
-                    .background(Color(0xE60B0D12))
-                    .border(1.dp, Palette.GlassEdge)
+                    .clip(panel)
+                    // Dark glass with a soft sheen from the top, and an edge that catches the light.
+                    .background(Color(0xFF0B0D12).copy(alpha = UiSettings.glass.panel))
+                    .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.14f), Color.White.copy(alpha = 0.02f))))
+                    .border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.45f), Color.White.copy(alpha = 0.10f))), panel)
                     .focusProperties { exit = { FocusRequester.Cancel } }
                     .focusGroup()
                     .onPreviewKeyEvent { event ->
@@ -148,17 +171,17 @@ fun Shell(
                             false
                         }
                     }
-                    .padding(start = 18.dp, end = 14.dp, top = 22.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                    .padding(start = 14.dp, end = 12.dp, top = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
-                Text("Fancyfin", color = Palette.Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("Fancyfin", color = Palette.Text, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 6.dp))
                 var section = ""
                 Tab.values().forEach { tab ->
                     if (tab.section != section) {
                         section = tab.section
                         Text(
-                            section.uppercase(), color = Palette.TextMuted, fontSize = 10.sp,
-                            modifier = Modifier.padding(top = 14.dp, bottom = 2.dp),
+                            section.uppercase(), color = Palette.TextMuted, fontSize = 10.sp, letterSpacing = 1.2.sp,
+                            modifier = Modifier.padding(start = 6.dp, top = 16.dp, bottom = 3.dp),
                         )
                     }
                     MenuItem(
@@ -170,7 +193,7 @@ fun Shell(
                 }
                 Box(Modifier.weight(1f))
                 MenuItem("Sign out", false, Modifier, onSignOut)
-                Box(Modifier.height(18.dp))
+                Box(Modifier.height(16.dp))
             }
         }
     }
@@ -180,28 +203,32 @@ fun Shell(
 private fun MenuItem(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     FocusBox(
         onClick = onClick,
-        modifier = modifier.fillMaxWidth().height(32.dp),
-        shape = RoundedCornerShape(UiSettings.corner.card),
+        modifier = modifier.fillMaxWidth().height(34.dp),
+        shape = RoundedCornerShape(UiSettings.corner.button.coerceAtLeast(8.dp)),
         focusedScale = 1.03f,
+        edge = false,
     ) { focused ->
         Box(
             Modifier.fillMaxSize()
                 .background(
                     when {
-                        focused -> Palette.GlassFillStrong
-                        selected -> Palette.GlassFill
+                        focused -> Color.White.copy(alpha = 0.26f)
+                        selected -> Color.White.copy(alpha = 0.13f)
                         else -> Color.Transparent
                     },
                 )
                 .padding(horizontal = 12.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
-            Text(
-                label,
-                color = if (selected) Palette.Accent else Palette.Text,
-                fontSize = 13.sp,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.size(6.dp).background(if (selected) Palette.Accent else Color.Transparent, RoundedCornerShape(50)))
+                Text(
+                    label,
+                    color = Palette.Text,
+                    fontSize = 13.sp,
+                    fontWeight = if (selected || focused) FontWeight.SemiBold else FontWeight.Normal,
+                )
+            }
         }
     }
 }
