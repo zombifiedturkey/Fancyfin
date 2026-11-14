@@ -247,7 +247,7 @@ private fun TrackMenu(player: ExoPlayer, tick: Int, onClose: () -> Unit) {
                     val leadIndex = entries.indexOfFirst { it.selected }.coerceAtLeast(0)
                     entries.forEachIndexed { i, e ->
                         FocusBox(
-                            onClick = { e.pick(); },
+                            onClick = { e.pick(); onClose() },
                             modifier = (if (lead && i == leadIndex) Modifier.focusRequester(first) else Modifier).fillMaxWidth(),
                             shape = RoundedCornerShape(UiSettings.corner.button.coerceAtLeast(6.dp)),
                             focusedScale = 1.03f,
@@ -501,6 +501,7 @@ private fun PlayerBody(
 
     BackHandler {
         when {
+            menuOpen -> menuOpen = false
             nextCard -> nextDismissed = true
             controls -> controls = false
             else -> onDone()
