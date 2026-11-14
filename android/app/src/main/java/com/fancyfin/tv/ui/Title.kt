@@ -1,5 +1,6 @@
 package com.fancyfin.tv.ui
 
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -107,18 +108,15 @@ internal fun PosterTile(
     modifier: Modifier = Modifier,
 ) {
     Column(Modifier.width(width), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        FocusBox(onClick = onClick, modifier = modifier.width(width).height(height), edge = UiSettings.posterBorder) { _ ->
+        FocusBox(onClick = onClick, modifier = modifier.width(width).height(height), edge = UiSettings.posterBorder, focusedScale = 1.06f) { _ ->
             Box(Modifier.fillMaxSize().background(Palette.GlassFill)) {
                 if (url != null) AsyncImage(model = url, contentDescription = title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                 if (current) Box(Modifier.fillMaxSize().border(2.dp, Palette.Accent, RoundedCornerShape(UiSettings.corner.card)))
-                if (onServer) {
-                    Box(
-                        Modifier.align(Alignment.TopEnd).padding(5.dp).size(9.dp)
-                            .background(Palette.Accent, CircleShape).border(1.dp, Color.Black, CircleShape),
-                    )
-                }
+                if (!onServer) NotOnServerPill(Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp))
             }
         }
+        // Room for the focused poster to grow into without its border crossing the title.
+        Spacer(Modifier.height(5.dp))
         Text(title, color = if (current) Palette.Accent else Palette.Text, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }

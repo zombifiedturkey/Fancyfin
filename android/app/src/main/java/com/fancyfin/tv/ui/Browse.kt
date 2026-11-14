@@ -142,7 +142,7 @@ internal val NoAutoScroll = object : BringIntoViewSpec {
     override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = 0f
 }
 
-private fun itemEntry(i: Item, client: JellyfinClient) = HeroEntry(
+internal fun itemEntry(i: Item, client: JellyfinClient) = HeroEntry(
     key = i.id,
     title = i.seriesName ?: i.name,
     overview = i.overview,
@@ -159,7 +159,7 @@ private fun itemEntry(i: Item, client: JellyfinClient) = HeroEntry(
     action = if (i.positionTicks > 0) "Resume" else "Play",
 )
 
-private fun discoverEntry(d: Discover, index: Map<String, Item>) = HeroEntry(
+internal fun discoverEntry(d: Discover, index: Map<String, Item>) = HeroEntry(
     key = "${d.kind}:${d.tmdbId}", title = d.title, overview = d.overview, year = d.year,
     rating = d.rating, genres = d.genres, backdrop = d.backdrop, poster = d.poster,
     kind = d.kind, tmdbId = d.tmdbId, onServer = index["${d.kind}:${d.tmdbId}"],
@@ -171,7 +171,7 @@ private fun moreEntry(genre: String) = HeroEntry(
 )
 
 /** Play a title that's on the server, open it if it's a show, or say it isn't here. */
-private fun playEntry(
+internal fun playEntry(
     e: HeroEntry,
     scope: CoroutineScope,
     client: JellyfinClient,
@@ -191,7 +191,7 @@ private fun playEntry(
     }
 }
 
-private fun titleRef(e: HeroEntry) = TitleRef(e.kind, e.tmdbId, e.onServer, e.title, e.backdrop, e.poster)
+internal fun titleRef(e: HeroEntry) = TitleRef(e.kind, e.tmdbId, e.onServer, e.title, e.backdrop, e.poster)
 
 /** "Close Fancyfin?" in glass. Back or Stay dismisses it. */
 @OptIn(ExperimentalComposeUiApi::class)
@@ -746,6 +746,124 @@ private fun HeroTile(
                 }
             }
         }
+        if (!expanded && entry.onServer == null) NotOnServerPill(Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp))
         entry.progress?.let { ProgressLine(it, Modifier.align(Alignment.BottomStart)) }
+    }
+}
+
+/**
+ * Inside one franchise, universe or studio: featured tiles for its most popular films, then the most
+ * recently released, then everything you own as a grid. Missing films in a franchise or universe show too,
+ * marked "Not on server", so you can add them.
+ */
+@Composable
+fun CollectionScreen(
+    tile: com.fancyfin.tv.data.CollectionTile,
+    state: FeatureState,
+    client: JellyfinClient,
+    onOpen: (Item) -> Unit,
+    onPlay: (Item) -> Unit,
+    onTitle: (TitleRef) -> Unit,
+    onTab: (Tab) -> Unit,
+    onSignOut: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var sections by state::sections
+    var allItems by state::allItems
+    var sortIndex by state::sortIndex
+    var loading by state::loading
+    var wallpaper by state::wallpaper
+    var message by remember { mutableStateOf<String?>(null) }
+    val sorts = listOf("Date released", "Rating", "Alphabetical")
+
+    LaunchedEffect(tile.key) {
+        if (state.loaded) return@LaunchedEffect
+        val owned = tile.items.map { itemEntry(it, client) }
+        // Show what you own straight away, then add the films you don't have.
+        fun build(all: List<HeroEntry>) {
+            val popular = all.sortedByDescending { it.rating ?: 0.0 }.take(12)
+            val recent = all.sortedByDescending { it.year ?: 0 }.take(12)
+            sections = listOfNotNull(
+                popular.takeIf { it.isNotEmpty() }?.let { HeroSection("Most popular", it) },
+                recent.takeIf { it.isNotEmpty() }?.let { HeroSection("Recently released", it) },
+            )
+            if (wallpaper == null) {
+                val first = popular.firstOrNull()
+                wallpaper = if (first?.backdrop?.contains("image.tmdb.org") == true) smallTmdb(first.backdrop) else first?.onServer?.let { client.backdrop(it, 96) }
+            }
+        }
+        build(owned)
+        loading = false
+        try {
+            val index = client.serverIndex()
+            val everything: List<HeroEntry>? = when {
+                tile.collectionId != null -> client.franchise(tile.collectionId).map { discoverEntry(it, index) }.takeIf { it.isNotEmpty() }
+                tile.wikidataId != null -> {
+                    val have = tile.items.mapNotNull { it.tmdbId?.toIntOrNull() }.toSet()
+                    val missing = client.universeFilmIds(tile.wikidataId).filter { it !in have && index["movie:$it"] == null }
+                    owned + client.tmdbMovies(missing).map { discoverEntry(it, index) }
+                }
+                else -> null
+            }
+            if (everything != null) build(everything)
+        } catch (e: Exception) {
+            // The films you own are already showing.
+        }
+        state.loaded = true
+    }
+
+    allItems = when (sortIndex) {
+        0 -> tile.items.sortedByDescending { it.year ?: 0 }
+        1 -> tile.items.sortedByDescending { it.rating ?: 0.0 }
+        else -> tile.items.sortedBy { it.name }
+    }
+
+    Shell(Tab.Collections, onTab, onSignOut) { contentModifier ->
+        Box(Modifier.fillMaxSize()) {
+            Backdrop(wallpaper)
+            if (loading) {
+                Text("Loading…", color = Palette.TextMuted, fontSize = 14.sp, modifier = Modifier.padding(20.dp))
+            } else {
+                Column(contentModifier.fillMaxSize()) {
+                    Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 40.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(tile.kind.uppercase(), color = Palette.Accent, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                            Text(tile.name, color = Palette.Text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                            val total = tile.total
+                            Text(
+                                if (total != null && total > tile.owned) "${tile.owned} of $total films on your server" else "${tile.owned} films",
+                                color = Palette.TextMuted, fontSize = 11.sp,
+                            )
+                        }
+                        GlassButton(
+                            if (Pins.hasCollection(tile.key)) "Unpin from menu" else "Pin to menu",
+                            { Pins.toggleCollection(tile.key, tile.name) },
+                            compact = true,
+                        )
+                    }
+                    FeatureList(
+                        modifier = Modifier.weight(1f),
+                        state = state,
+                        client = client,
+                        sections = sections,
+                        grid = GridSpec(allItems, sorts, sortIndex) { sortIndex = it },
+                        onWallpaper = { wallpaper = it },
+                        onPlay = { e -> onTitle(titleRef(e)) },
+                        onDetails = { e -> playEntry(e, scope, client, onPlay, onOpen) { message = it } },
+                        onMore = {},
+                        onOpenItem = onOpen,
+                        onExit = null,
+                    )
+                }
+            }
+            message?.let {
+                Text(
+                    it, color = Palette.Text, fontSize = 12.sp,
+                    modifier = Modifier.align(Alignment.BottomStart).padding(start = 20.dp, bottom = 24.dp)
+                        .background(Color(0xB3000000), RoundedCornerShape(UiSettings.corner.button))
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                )
+            }
+        }
     }
 }

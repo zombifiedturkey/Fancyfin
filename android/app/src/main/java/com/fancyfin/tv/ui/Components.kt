@@ -175,3 +175,16 @@ fun MetaLine(item: Item, modifier: Modifier = Modifier) {
         Text(parts.joinToString("   ·   "), color = Palette.TextMuted, fontSize = 12.sp)
     }
 }
+
+/** The small pill on a poster for something that isn't on your server. */
+@Composable
+fun NotOnServerPill(modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(50)
+    Text(
+        "Not on server", color = Palette.Text, fontSize = 8.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+        modifier = modifier
+            .background(Color(0xCC000000), shape)
+            .border(1.dp, Palette.GlassEdge, shape)
+            .padding(horizontal = 7.dp, vertical = 2.dp),
+    )
+}

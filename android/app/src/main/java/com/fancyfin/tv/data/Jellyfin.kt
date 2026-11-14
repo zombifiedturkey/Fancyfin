@@ -99,6 +99,8 @@ class CollectionTile(
     /** Films in the whole franchise, when known. */
     val total: Int?,
     val collectionId: Int?,
+    /** Wikidata id, for universes. */
+    val wikidataId: String? = null,
 ) {
     val owned: Int get() = items.size
 }
@@ -527,6 +529,163 @@ class JellyfinClient(private val prefs: Prefs) {
 
     // ---- Collections --------------------------------------------------------------------------
 
+    /** One Wikidata query (the same source the Yamz collections use). Returns the result rows. */
+    private fun sparql(query: String): JSONArray {
+        val connection = URL("https://query.wikidata.org/sparql").openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 10_000
+            connection.readTimeout = 60_000
+            connection.doOutput = true
+            connection.setRequestProperty("Accept", "application/sparql-results+json")
+            connection.setRequestProperty("User-Agent", "FancyfinTV/0.2 (https://github.com/zombifiedturkey/Fancyfin)")
+            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+            connection.outputStream.use { it.write(("query=" + URLEncoder.encode(query, "UTF-8")).toByteArray()) }
+            if (connection.responseCode !in 200..299) throw ApiException("Wikidata said HTTP ${connection.responseCode}", connection.responseCode)
+            val text = connection.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
+            return JSONObject(text).getJSONObject("results").getJSONArray("bindings")
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun qid(uri: String) = uri.substringAfterLast('/')
+
+    /**
+     * Shared universes (like the Marvel Cinematic Universe) found on Wikidata from your movies' TMDB ids,
+     * remembered for a week. Never throws: no universes is better than no collections.
+     */
+    private suspend fun universeTiles(movies: List<Item>, franchises: List<CollectionTile>, onStatus: (String) -> Unit): List<CollectionTile> =
+        withContext(Dispatchers.IO) {
+            try {
+                // 1. TMDB id -> Wikidata id for each movie, remembered.
+                val qOf = HashMap<String, String>()   // movie item id -> Q-id
+                val unknown = ArrayList<Item>()
+                for (m in movies) {
+                    val t = m.tmdbId ?: continue
+                    val c = prefs.cacheGet("q:$t")
+                    if (c == null) unknown.add(m) else if (c != "-") qOf[m.id] = c
+                }
+                var done = 0
+                for (chunk in unknown.chunked(150)) {
+                    onStatus("Finding universes… $done of ${unknown.size}")
+                    val values = chunk.joinToString(" ") { "\"" + it.tmdbId + "\"" }
+                    val rows = sparql("SELECT ?f ?t WHERE { VALUES ?t { $values } ?f wdt:P4947 ?t }")
+                    val found = HashMap<String, String>()
+                    for (i in 0 until rows.length()) {
+                        val r = rows.getJSONObject(i)
+                        found.putIfAbsent(r.getJSONObject("t").getString("value"), qid(r.getJSONObject("f").getString("value")))
+                    }
+                    val save = HashMap<String, String>()
+                    for (m in chunk) {
+                        val t = m.tmdbId ?: continue
+                        val q = found[t]
+                        save["q:$t"] = q ?: "-"
+                        if (q != null) qOf[m.id] = q
+                    }
+                    prefs.cachePut(save)
+                    done += chunk.size
+                }
+
+                // 2. Which universe each film belongs to.
+                val signature = qOf.size.toString()
+                val cached = prefs.cacheGet("universes:v1")?.let { try { JSONObject(it) } catch (e: Exception) { null } }
+                val groups: Map<String, Pair<String, Set<String>>> =
+                    if (cached != null && cached.optString("sig") == signature && System.currentTimeMillis() - cached.optLong("at") < 7 * 86_400_000L) {
+                        val arr = cached.getJSONArray("groups")
+                        (0 until arr.length()).associate { i ->
+                            val g = arr.getJSONObject(i)
+                            g.getString("id") to (g.getString("name") to (0 until g.getJSONArray("films").length()).map { g.getJSONArray("films").getString(it) }.toSet())
+                        }
+                    } else {
+                        onStatus("Finding universes…")
+                        val found = HashMap<String, Pair<String, HashSet<String>>>()
+                        for (chunk in qOf.values.distinct().chunked(150)) {
+                            val rows = sparql(
+                                "SELECT ?f ?s ?sLabel WHERE { VALUES ?f { ${chunk.joinToString(" ") { "wd:$it" }} } ?f wdt:P1434 ?s . " +
+                                    "SERVICE wikibase:label { bd:serviceParam wikibase:language \"en\". } }",
+                            )
+                            for (i in 0 until rows.length()) {
+                                val r = rows.getJSONObject(i)
+                                val id = qid(r.getJSONObject("s").getString("value"))
+                                val name = r.optJSONObject("sLabel")?.optString("value") ?: id
+                                found.getOrPut(id) { name to HashSet() }.second.add(qid(r.getJSONObject("f").getString("value")))
+                            }
+                        }
+                        val arr = JSONArray()
+                        found.forEach { (id, g) -> arr.put(JSONObject().put("id", id).put("name", g.first).put("films", JSONArray(g.second.toList()))) }
+                        prefs.cachePut(mapOf("universes:v1" to JSONObject().put("sig", signature).put("at", System.currentTimeMillis()).put("groups", arr).toString()))
+                        found
+                    }
+
+                val itemsByQ = HashMap<String, ArrayList<Item>>()
+                for (m in movies) qOf[m.id]?.let { itemsByQ.getOrPut(it) { ArrayList() }.add(m) }
+                val franchiseSets = franchises.map { f -> f.items.map { it.id }.toSet() }
+                val tiles = ArrayList<CollectionTile>()
+                for ((id, g) in groups) {
+                    val name = g.first
+                    if (name.matches(Regex("^Q\\d+$"))) continue
+                    val owned = g.second.flatMap { itemsByQ[it].orEmpty() }.distinctBy { it.id }
+                    if (owned.size < 2) continue
+                    // A universe with exactly the same films as a franchise adds nothing.
+                    if (franchiseSets.any { it == owned.map { o -> o.id }.toSet() }) continue
+                    val posters = owned.sortedByDescending { it.rating ?: 0.0 }.mapNotNull { poster(it, 200) }.take(4)
+                    val total = prefs.cacheGet("univsize:$id")?.toIntOrNull()
+                    tiles.add(CollectionTile("universe:$id", "universe", name, owned.sortedBy { it.year ?: 0 }, posters, total, null, id))
+                }
+
+                // 3. How many films each universe has in all.
+                val needSize = tiles.filter { it.total == null }.mapNotNull { it.wikidataId }
+                val sizes = HashMap<String, Int>()
+                for (chunk in needSize.chunked(40)) {
+                    try {
+                        val rows = sparql(
+                            "SELECT ?s (COUNT(DISTINCT ?m) AS ?n) WHERE { VALUES ?s { ${chunk.joinToString(" ") { "wd:$it" }} } " +
+                                "{ ?m wdt:P1434 ?s } UNION { ?m wdt:P179 ?s } ?m wdt:P31 wd:Q11424 } GROUP BY ?s",
+                        )
+                        val save = HashMap<String, String>()
+                        for (i in 0 until rows.length()) {
+                            val r = rows.getJSONObject(i)
+                            val id = qid(r.getJSONObject("s").getString("value"))
+                            val n = r.getJSONObject("n").getString("value").toIntOrNull() ?: continue
+                            sizes[id] = n
+                            save["univsize:$id"] = n.toString()
+                        }
+                        prefs.cachePut(save)
+                    } catch (e: Exception) { /* totals are a nicety */ }
+                }
+                tiles.map { t ->
+                    val n = sizes[t.wikidataId]
+                    if (n != null) CollectionTile(t.key, t.kind, t.name, t.items, t.posters, n, null, t.wikidataId) else t
+                }.sortedByDescending { it.owned }
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
+
+    /** TMDB ids of every film in a universe, from Wikidata. */
+    suspend fun universeFilmIds(wikidataId: String): List<Int> = withContext(Dispatchers.IO) {
+        try {
+            val rows = sparql(
+                "SELECT DISTINCT ?t WHERE { { ?m wdt:P1434 wd:$wikidataId } UNION { ?m wdt:P179 wd:$wikidataId } " +
+                    "?m wdt:P31 wd:Q11424 . ?m wdt:P4947 ?t }",
+            )
+            (0 until rows.length()).mapNotNull { rows.getJSONObject(it).getJSONObject("t").getString("value").toIntOrNull() }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    /** Basic TMDB details for these movies (title, poster, year, rating). */
+    suspend fun tmdbMovies(ids: List<Int>): List<Discover> = withContext(Dispatchers.IO) {
+        val out = JSONArray()
+        for (chunk in ids.take(40).chunked(6)) {
+            val got = coroutineScope {
+                chunk.map { id -> async { try { JSONObject(request(fancyfin, "/tmdb/movie/$id")) } catch (e: Exception) { null } } }.awaitAll()
+            }
+            got.filterNotNull().forEach { out.put(it) }
+        }
+        parseTmdb(out, "movie")
+    }
+
     /**
      * Studios (from Jellyfin) and franchises (TMDB collections) for the movies on the server. Franchises
      * need a TMDB look-up per movie the first time, so they fill in as they are found and are remembered
@@ -626,7 +785,10 @@ class JellyfinClient(private val prefs: Prefs) {
             for (g in got) if (g != null && g.second > 0) { sizes[g.first] = g.second; save["colsize:${g.first}"] = g.second.toString() }
             prefs.cachePut(save)
         }
-        onUpdate(everything(), null)
+        val franchisesNow = franchiseTiles()
+        onUpdate(everything(), "Finding universes…")
+        val universes = universeTiles(movies, franchisesNow) { onUpdate(everything(), it) }
+        onUpdate((franchisesNow + universes + studioTiles).sortedByDescending { it.owned }, null)
     }
 
     // ---- Playback extras ---------------------------------------------------------------------

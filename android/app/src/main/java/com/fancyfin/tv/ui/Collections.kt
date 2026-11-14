@@ -54,7 +54,7 @@ class CollectionsState {
     val grid = LazyGridState()
 }
 
-private val FILTERS = listOf("All", "Franchises", "Studios")
+private val FILTERS = listOf("All", "Franchises", "Universes", "Studios")
 
 /** Franchises and studios as a grid of poster collages, with how much of each you own. */
 @Composable
@@ -96,10 +96,11 @@ fun CollectionsScreen(
     }
 
     val shown = state.tiles.filter {
-        (state.filter == 0 || (state.filter == 1 && it.kind == "franchise") || (state.filter == 2 && it.kind == "studio")) &&
-            (state.query.isBlank() || it.name.contains(state.query.trim(), ignoreCase = true))
+        (state.filter == 0 || (state.filter == 1 && it.kind == "franchise") || (state.filter == 2 && it.kind == "universe") || (state.filter == 3 && it.kind == "studio")) &&
+            true
     }
     val franchises = state.tiles.count { it.kind == "franchise" }
+    val universes = state.tiles.count { it.kind == "universe" }
     val studios = state.tiles.count { it.kind == "studio" }
 
     Shell(Tab.Collections, onTab, onSignOut) { contentModifier ->
@@ -116,11 +117,8 @@ fun CollectionsScreen(
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         FILTERS.forEachIndexed { i, label ->
-                            val n = when (i) { 0 -> state.tiles.size; 1 -> franchises; else -> studios }
+                            val n = when (i) { 0 -> state.tiles.size; 1 -> franchises; 2 -> universes; else -> studios }
                             GlassButton("$label  $n", { state.filter = i }, primary = state.filter == i, compact = true)
-                        }
-                        Box(Modifier.padding(start = 10.dp)) {
-                            Field("Filter collections", state.query, { state.query = it }, wide = false)
                         }
                     }
                 }
@@ -154,6 +152,7 @@ private fun CollectionCard(tile: CollectionTile, modifier: Modifier, onClick: ()
             onFocused = onFocused,
             modifier = Modifier.fillMaxWidth().aspectRatio(0.68f),
             edge = UiSettings.posterBorder,
+            focusedScale = 1.05f,
         ) { _ ->
             Box(Modifier.fillMaxSize().background(Palette.GlassFill)) {
                 Column(Modifier.fillMaxSize()) {
@@ -176,6 +175,8 @@ private fun CollectionCard(tile: CollectionTile, modifier: Modifier, onClick: ()
                 )
             }
         }
+        // Room for the focused tile to grow into without its border crossing the name.
+        Box(Modifier.height(8.dp))
         Text(tile.name, color = Palette.Text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         val total = tile.total
         Text(
@@ -185,77 +186,6 @@ private fun CollectionCard(tile: CollectionTile, modifier: Modifier, onClick: ()
         if (total != null && total > tile.owned) {
             Box(Modifier.fillMaxWidth().height(3.dp).background(Color(0x33FFFFFF), RoundedCornerShape(50))) {
                 Box(Modifier.fillMaxWidth((tile.owned.toFloat() / total).coerceIn(0f, 1f)).fillMaxHeight().background(Palette.Accent, RoundedCornerShape(50)))
-            }
-        }
-    }
-}
-
-private class Entry(val title: String, val poster: String?, val item: Item?, val ref: TitleRef)
-
-/** What's inside one franchise or studio: what you own, and for a franchise the films you don't have yet. */
-@Composable
-fun CollectionScreen(
-    tile: CollectionTile,
-    client: JellyfinClient,
-    onOpenItem: (Item) -> Unit,
-    onOpenTitle: (TitleRef) -> Unit,
-) {
-    var entries by remember(tile.key) {
-        mutableStateOf(tile.items.map { Entry(it.name, client.poster(it, 300), it, TitleRef.of(it)) })
-    }
-    LaunchedEffect(tile.key) {
-        val id = tile.collectionId ?: return@LaunchedEffect
-        try {
-            val index = client.serverIndex()
-            val parts = client.franchise(id)
-            if (parts.isNotEmpty()) {
-                entries = parts.map { d ->
-                    val owned = index["movie:${d.tmdbId}"]
-                    Entry(d.title, owned?.let { client.poster(it, 300) } ?: d.poster, owned, TitleRef("movie", d.tmdbId, owned, d.title, d.backdrop, d.poster))
-                }
-            }
-        } catch (e: Exception) {
-            // Keep the films you own.
-        }
-    }
-    Box(Modifier.fillMaxSize()) {
-        Backdrop(null)
-        Column(Modifier.fillMaxSize()) {
-            Row(Modifier.fillMaxWidth().padding(start = 40.dp, end = 40.dp, top = 22.dp), verticalAlignment = Alignment.Bottom) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(tile.kind.uppercase(), color = Palette.Accent, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
-                    Text(tile.name, color = Palette.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                    val total = tile.total
-                    Text(
-                        if (total != null && total > tile.owned) "${tile.owned} of $total films on your server" else "${tile.owned} films",
-                        color = Palette.TextMuted, fontSize = 12.sp,
-                    )
-                }
-                GlassButton(
-                    if (Pins.hasCollection(tile.key)) "Unpin from menu" else "Pin to menu",
-                    { Pins.toggleCollection(tile.key, tile.name) },
-                    compact = true,
-                )
-            }
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(7),
-                contentPadding = PaddingValues(start = 40.dp, end = 40.dp, top = 16.dp, bottom = 40.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                items(entries, key = { it.ref.tmdbId?.toString() ?: it.item?.id ?: it.title }) { e ->
-                    PosterTile(
-                        url = e.poster,
-                        title = e.title,
-                        onServer = e.item != null,
-                        current = false,
-                        onClick = { if (e.item != null) onOpenItem(e.item) else onOpenTitle(e.ref) },
-                        width = 104.dp,
-                        height = 156.dp,
-                        modifier = if (e.item == null) Modifier.alpha(0.6f) else Modifier,
-                    )
-                }
             }
         }
     }
