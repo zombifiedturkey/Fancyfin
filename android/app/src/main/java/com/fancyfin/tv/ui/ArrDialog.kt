@@ -39,6 +39,7 @@ import kotlinx.coroutines.delay
  * Choose where a title goes in Radarr / Sonarr: quality profile, folder and, for shows, the whole show
  * or one season. "Add and remember" saves the profile and folder and stops asking (Settings turns it back on).
  */
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun ArrDialog(
     app: String,
