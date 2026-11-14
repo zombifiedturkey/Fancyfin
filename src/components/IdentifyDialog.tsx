@@ -128,15 +128,14 @@ export function IdentifyDialog({
 						<button
 							type="button"
 							disabled={apply.isPending}
-							onClick={() =>
-								apply.mutate(
-									{ result: chosen, replaceAllImages: replaceImages },
-									{ onSuccess: onClose },
-								)
-							}
+							onClick={() => {
+								// The server takes a while, so close at once and let it queue up in the background.
+								apply.mutate({ result: chosen, replaceAllImages: replaceImages });
+								onClose();
+							}}
 							className={`${button} bg-ink text-canvas`}
 						>
-							{apply.isPending ? "Applying…" : "Apply match"}
+							Apply match
 						</button>
 					</div>
 				</div>

@@ -64,6 +64,9 @@ export function useRemoteSearch(
 export function useApplyMatch(itemId: string) {
 	const queryClient = useQueryClient();
 	return useMutation({
+		mutationKey: ["apply-match", itemId],
+		// One at a time, in the order they were chosen, so a run of them queues up instead of hammering the server.
+		scope: { id: "apply-match" },
 		mutationFn: async (input: {
 			result: RemoteSearchResult;
 			replaceAllImages: boolean;

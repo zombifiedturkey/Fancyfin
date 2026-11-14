@@ -1,4 +1,5 @@
 import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models/base-item-dto";
+import { useMutationState } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { EditDetailsDialog } from "../components/EditDetailsDialog";
@@ -28,6 +29,13 @@ function Row({ entry, canFix }: { entry: AttentionItem; canFix: boolean }) {
 	const [identifying, setIdentifying] = useState(false);
 	const [editing, setEditing] = useState(false);
 	const poster = posterImage(item, 160);
+	// Matches chosen for this title run in the background; show where they are up to.
+	const matchStates = useMutationState({
+		filters: { mutationKey: ["apply-match", id] },
+		select: (mutation) => mutation.state.status,
+	});
+	const applying = matchStates.includes("pending");
+	const applyFailed = !applying && matchStates.at(-1) === "error";
 
 	return (
 		<li className="flex gap-4 rounded-card border border-glass-border bg-glass p-3">
@@ -77,6 +85,16 @@ function Row({ entry, canFix }: { entry: AttentionItem; canFix: boolean }) {
 						</span>
 					))}
 				</div>
+				{applying && (
+					<p className="mt-2 text-xs text-accent">
+						Applying the new match… it leaves this list when the server is done.
+					</p>
+				)}
+				{applyFailed && (
+					<p className="mt-2 text-xs text-danger">
+						The server couldn't apply that match. Try Fix match again.
+					</p>
+				)}
 				{refresh.isSuccess && (
 					<p className="mt-2 text-xs text-ink-muted">
 						Refresh started. This row updates when the server is done.
@@ -92,6 +110,7 @@ function Row({ entry, canFix }: { entry: AttentionItem; canFix: boolean }) {
 				<div className="flex shrink-0 flex-col justify-center gap-2">
 					<button
 						type="button"
+						disabled={applying}
 						onClick={() => setIdentifying(true)}
 						className={`${action} bg-ink text-canvas`}
 					>
