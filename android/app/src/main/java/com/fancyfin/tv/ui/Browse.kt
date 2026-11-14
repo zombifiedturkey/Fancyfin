@@ -5,6 +5,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,9 +22,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -228,7 +232,18 @@ fun BrowseScreen(
     }
 }
 
-/** The tile you are on is wide and shows everything; the rest are narrow posters that open as you reach them. */
+/** Stops the list from scrolling by itself when a tile gets focus; HeroRow places the tiles itself. */
+@OptIn(ExperimentalFoundationApi::class)
+private val NoAutoScroll = object : BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = 0f
+}
+
+/**
+ * The tile you are on is wide and shows everything; the rest are narrow posters that open as you reach
+ * them. The row always scrolls so the tile you are on has exactly one narrow tile before it, in either
+ * direction, so it doesn't jump around as it opens.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HeroRow(
     entries: List<HeroEntry>,
@@ -237,12 +252,19 @@ private fun HeroRow(
     onClick: (HeroEntry) -> Unit,
     onLongClick: (HeroEntry) -> Unit,
 ) {
-    LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        contentPadding = PaddingValues(horizontal = 48.dp),
-    ) {
-        itemsIndexed(entries) { index, entry ->
-            HeroTile(entry, expanded = index == selected, onFocused = { onSelect(index) }, onClick = { onClick(entry) }, onLongClick = { onLongClick(entry) })
+    val listState = rememberLazyListState()
+    LaunchedEffect(selected) {
+        listState.animateScrollToItem((selected - 1).coerceAtLeast(0))
+    }
+    CompositionLocalProvider(LocalBringIntoViewSpec provides NoAutoScroll) {
+        LazyRow(
+            state = listState,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(horizontal = 48.dp),
+        ) {
+            itemsIndexed(entries) { index, entry ->
+                HeroTile(entry, expanded = index == selected, onFocused = { onSelect(index) }, onClick = { onClick(entry) }, onLongClick = { onLongClick(entry) })
+            }
         }
     }
 }
