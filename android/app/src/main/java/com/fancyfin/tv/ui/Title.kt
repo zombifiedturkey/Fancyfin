@@ -341,7 +341,7 @@ fun TitleScreen(
                             fun lead(): Modifier = if (!firstAssigned) { firstAssigned = true; Modifier.focusRequester(first) } else Modifier
                             if (target != null) {
                                 GlassButton(
-                                    compact = isShow,
+                                    compact = true,
                                     label = (if (resuming) "Resume" else "Play") + (target.episodeLabel?.let { " $it" } ?: ""),
                                     primary = true,
                                     modifier = lead(),
@@ -352,7 +352,7 @@ fun TitleScreen(
                             if (ref.server == null && addId != null) {
                                 val app = if (kind == "movie") "Radarr" else "Sonarr"
                                 GlassButton(
-                                    compact = isShow,
+                                    compact = true,
                                     label = when (arrState) {
                                         "in" -> "In $app ✓"
                                         "adding" -> "Adding…"
@@ -381,7 +381,7 @@ fun TitleScreen(
                             }
                             if (shown != null) {
                                 GlassButton(
-                                    compact = isShow,
+                                    compact = true,
                                     label = if (shown.played) "Watched ✓" else "Mark watched",
                                     modifier = lead(),
                                     onClick = {
@@ -395,7 +395,7 @@ fun TitleScreen(
                                     },
                                 )
                                 GlassButton(
-                                    compact = isShow,
+                                    compact = true,
                                     label = if (shown.favorite) "★ Favourite" else "☆ Favourite",
                                     onClick = {
                                         val next = !shown.favorite
