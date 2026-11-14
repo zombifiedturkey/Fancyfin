@@ -42,6 +42,8 @@ import com.fancyfin.tv.data.Discover
 import com.fancyfin.tv.data.Item
 import com.fancyfin.tv.data.JellyfinClient
 import com.fancyfin.tv.data.MediaVersion
+import com.fancyfin.tv.data.Person
+import androidx.compose.ui.text.style.TextAlign
 import com.fancyfin.tv.data.TmdbTitle
 import com.fancyfin.tv.data.trailerKeys
 import kotlinx.coroutines.delay
@@ -84,9 +86,10 @@ private fun PosterTile(
     onClick: () -> Unit,
     width: Dp = 100.dp,
     height: Dp = 150.dp,
+    modifier: Modifier = Modifier,
 ) {
     Column(Modifier.width(width), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        FocusBox(onClick = onClick, modifier = Modifier.width(width).height(height)) { _ ->
+        FocusBox(onClick = onClick, modifier = modifier.width(width).height(height), edge = UiSettings.posterBorder) { _ ->
             Box(Modifier.fillMaxSize().background(Palette.GlassFill)) {
                 if (url != null) AsyncImage(model = url, contentDescription = title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                 if (current) Box(Modifier.fillMaxSize().border(2.dp, Palette.Accent, RoundedCornerShape(UiSettings.corner.card)))
@@ -114,6 +117,7 @@ fun TitleScreen(
     onPlay: (Item) -> Unit,
     onOpen: (TitleRef) -> Unit,
     onTrailer: (List<String>) -> Unit,
+    onPerson: (Person) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var item by remember { mutableStateOf(ref.server) }
@@ -283,10 +287,12 @@ fun TitleScreen(
                                 onClick = { onPlay(target) },
                             )
                         }
+                        if (ref.server == null) {
+                            // Becomes "Add to Radarr / Sonarr" once the arr flow is in.
+                            GlassButton("Not on your server", {}, modifier = lead(), clear = true)
+                        }
                         if (trailers.isNotEmpty()) {
                             GlassButton("Trailer", { onTrailer(trailers) }, modifier = lead())
-                        } else if (ref.server == null) {
-                            GlassButton("Not on your server", {}, modifier = lead(), clear = true)
                         }
                         if (shown != null) {
                             GlassButton(
@@ -347,13 +353,29 @@ fun TitleScreen(
                         SectionTitle("Cast")
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(horizontal = 24.dp, vertical = 4.dp)) {
                             items(t.cast) { p ->
-                                FocusBox(onClick = {}, modifier = Modifier.width(84.dp), shape = RoundedCornerShape(10.dp), focusedScale = 1.06f) { _ ->
-                                    Column(Modifier.padding(4.dp), horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                        Box(Modifier.size(76.dp).clip(CircleShape).background(Palette.GlassFill)) {
+                                FocusBox(
+                                    onClick = { onPerson(p) },
+                                    modifier = Modifier.width(108.dp).height(156.dp),
+                                    edge = UiSettings.posterBorder,
+                                ) { _ ->
+                                    Column(
+                                        Modifier.fillMaxSize()
+                                            .background(Palette.GlassFill)
+                                            .background(Palette.Accent.copy(alpha = 0.10f))
+                                            .padding(horizontal = 6.dp, vertical = 10.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        Box(Modifier.size(62.dp).clip(CircleShape).background(Palette.GlassFillStrong)) {
                                             if (p.photo != null) AsyncImage(model = p.photo, contentDescription = p.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                                         }
-                                        Text(p.name, color = Palette.Text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                        p.role?.let { Text(it, color = Palette.TextMuted, fontSize = 10.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+                                        Text(
+                                            p.name, color = Palette.Text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                                            textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                        )
+                                        p.role?.let {
+                                            Text(it, color = Palette.TextMuted, fontSize = 10.sp, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                        }
                                     }
                                 }
                             }
@@ -415,7 +437,7 @@ fun TitleScreen(
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 24.dp, vertical = 4.dp)) {
                             items(extras) { v ->
                                 Column(Modifier.width(176.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    FocusBox(onClick = { onTrailer(listOf(v.key)) }, modifier = Modifier.width(176.dp).height(99.dp)) { _ ->
+                                    FocusBox(onClick = { onTrailer(listOf(v.key)) }, modifier = Modifier.width(176.dp).height(99.dp), edge = UiSettings.posterBorder) { _ ->
                                         Box(Modifier.fillMaxSize().background(Palette.GlassFill)) {
                                             AsyncImage(
                                                 model = "https://i.ytimg.com/vi/${v.key}/mqdefault.jpg", contentDescription = v.name,
@@ -427,6 +449,85 @@ fun TitleScreen(
                                     Text(v.type.uppercase(), color = Palette.Accent, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                                     Text(v.name, color = Palette.Text, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Who to show a page for. */
+data class PersonRef(val id: Int, val name: String, val photo: String?)
+
+/** An actor's page: big photo on the left, bio on the right, and their films and shows underneath. */
+@Composable
+fun PersonScreen(
+    ref: PersonRef,
+    client: JellyfinClient,
+    onOpen: (TitleRef) -> Unit,
+) {
+    var info by remember { mutableStateOf<com.fancyfin.tv.data.PersonInfo?>(null) }
+    var index by remember { mutableStateOf<Map<String, Item>>(emptyMap()) }
+    var loaded by remember { mutableStateOf(false) }
+    val first = remember { FocusRequester() }
+
+    LaunchedEffect(ref.id) {
+        index = try { client.serverIndex() } catch (e: Exception) { emptyMap() }
+        info = try { client.person(ref.id) } catch (e: Exception) { null }
+        loaded = true
+    }
+    LaunchedEffect(loaded) {
+        if (loaded) {
+            delay(250)
+            try { first.requestFocus() } catch (e: Exception) { /* nothing to focus */ }
+        }
+    }
+
+    val photo = info?.photo ?: ref.photo
+    Box(Modifier.fillMaxSize()) {
+        Backdrop(photo)
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(top = 28.dp, bottom = 60.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            item {
+                Row(Modifier.padding(start = 24.dp, end = 24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                    Box(
+                        Modifier.width(190.dp).height(285.dp)
+                            .clip(RoundedCornerShape(UiSettings.corner.tile))
+                            .background(Palette.GlassFill),
+                    ) {
+                        if (photo != null) AsyncImage(model = photo, contentDescription = ref.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    }
+                    Column(Modifier.width(560.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(info?.name ?: ref.name, color = Palette.Text, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                        info?.born?.let { Text(it, color = Palette.Accent, fontSize = 12.sp) }
+                        val bio = info?.biography
+                        when {
+                            bio != null -> Text(bio, color = Palette.TextMuted, fontSize = 13.sp, maxLines = 12, overflow = TextOverflow.Ellipsis)
+                            loaded -> Text("No biography available.", color = Palette.TextMuted, fontSize = 13.sp)
+                            else -> Text("Loading…", color = Palette.TextMuted, fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+            val credits = info?.credits ?: emptyList()
+            if (credits.isNotEmpty()) {
+                item {
+                    Column {
+                        SectionTitle("Known for")
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 24.dp, vertical = 4.dp)) {
+                            items(credits.size) { i ->
+                                val d = credits[i]
+                                val here = index["${d.kind}:${d.tmdbId}"]
+                                PosterTile(
+                                    url = d.poster, title = d.title, onServer = here != null, current = false,
+                                    modifier = if (i == 0) Modifier.focusRequester(first) else Modifier,
+                                    onClick = { onOpen(TitleRef(d.kind, d.tmdbId, here, d.title, d.backdrop, d.poster)) },
+                                )
                             }
                         }
                     }

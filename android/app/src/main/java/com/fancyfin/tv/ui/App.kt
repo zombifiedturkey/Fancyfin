@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 private sealed class Route {
     data class Main(val tab: Tab) : Route()
     data class Title(val ref: TitleRef) : Route()
+    data class Person(val ref: PersonRef) : Route()
     data class Genre(val genre: String, val types: String) : Route()
     data class Play(val item: Item, val sourceId: String?) : Route()
 }
@@ -86,7 +87,8 @@ fun FancyfinApp() {
                     Tab.AllMovies, Tab.AllShows -> LibraryScreen(route.tab, client, open, goTab, signOut)
                 }
                 is Route.Genre -> GenreScreen(route.genre, route.types, client, open, play, openTitle, showTrailer, goTab, signOut)
-                is Route.Title -> TitleScreen(route.ref, client, play, openTitle, showTrailer)
+                is Route.Title -> TitleScreen(route.ref, client, play, openTitle, showTrailer) { p -> stack.add(Route.Person(PersonRef(p.id, p.name, p.photo))) }
+                is Route.Person -> PersonScreen(route.ref, client, openTitle)
                 is Route.Play -> PlayerScreen(route.item, client, route.sourceId, back)
             }
 

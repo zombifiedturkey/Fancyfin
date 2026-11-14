@@ -20,7 +20,7 @@ export const APPS = {
 const TMDB_BASE = "https://api.themoviedb.org/3";
 /** The parts of TMDB the app uses; everything else is refused. */
 const TMDB_PATHS =
-	/^(trending|search|discover|genre|movie|tv|collection|configuration)(\/|$)/;
+	/^(trending|search|discover|genre|movie|tv|collection|person|configuration)(\/|$)/;
 const TMDB_CACHE_MS = 30 * 60_000;
 const TMDB_CACHE_MAX = 500;
 

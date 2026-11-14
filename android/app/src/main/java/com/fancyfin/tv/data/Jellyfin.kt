@@ -27,7 +27,17 @@ fun trailerKeys(videos: List<Video>): List<String> =
         .sortedByDescending { (if (it.type == "Trailer") 2 else 0) + (if (it.official) 1 else 0) }
         .map { it.key }
 
-class Person(val name: String, val role: String?, val photo: String?)
+class Person(val id: Int, val name: String, val role: String?, val photo: String?)
+
+/** An actor's page: photo, bio and the films and shows they're known for, most popular first. */
+class PersonInfo(
+    val id: Int,
+    val name: String,
+    val biography: String?,
+    val photo: String?,
+    val born: String?,
+    val credits: List<Discover>,
+)
 
 class TmdbTitle(
     val kind: String,
@@ -378,7 +388,7 @@ class JellyfinClient(private val prefs: Prefs) {
         r.optJSONObject("credits")?.optJSONArray("cast")?.let {
             for (i in 0 until minOf(it.length(), 20)) {
                 val c = it.getJSONObject(i)
-                cast.add(Person(c.optString("name"), c.optString("character").takeIf { s -> s.isNotEmpty() }, tmdbImage(c.optString("profile_path").takeIf { s -> s != "null" }, "w185")))
+                cast.add(Person(c.optInt("id"), c.optString("name"), c.optString("character").takeIf { s -> s.isNotEmpty() }, tmdbImage(c.optString("profile_path").takeIf { s -> s != "null" }, "w185")))
             }
         }
         val rec = r.optJSONObject("recommendations")?.optJSONArray("results")
@@ -404,6 +414,48 @@ class JellyfinClient(private val prefs: Prefs) {
             more = more,
             collectionId = collection?.optInt("id")?.takeIf { it > 0 },
             collectionName = collection?.optString("name"),
+        )
+    }
+
+    /** One person from TMDB with their credits. Null when TMDB isn't set up. */
+    suspend fun person(id: Int): PersonInfo? = withContext(Dispatchers.IO) {
+        loadGenres()
+        val body = try {
+            request(fancyfin, "/tmdb/person/$id?append_to_response=combined_credits")
+        } catch (e: ApiException) { return@withContext null }
+        val r = JSONObject(body)
+        val cast = r.optJSONObject("combined_credits")?.optJSONArray("cast")
+        val picked = ArrayList<JSONObject>()
+        val seen = HashSet<String>()
+        if (cast != null) {
+            for (i in 0 until cast.length()) {
+                val c = cast.getJSONObject(i)
+                val type = c.optString("media_type")
+                if ((type != "movie" && type != "tv") || c.isNull("poster_path")) continue
+                val ids = c.optJSONArray("genre_ids")
+                var talk = false
+                if (ids != null) for (j in 0 until ids.length()) if (ids.getInt(j) == 10767 || ids.getInt(j) == 10763) talk = true
+                if (talk || !seen.add(type + c.optInt("id"))) continue
+                picked.add(c)
+            }
+        }
+        picked.sortByDescending { it.optDouble("popularity", 0.0) }
+        val arr = JSONArray()
+        picked.take(40).forEach { arr.put(it) }
+        val born = r.optString("birthday").takeIf { it.isNotEmpty() && it != "null" }?.let {
+            try {
+                val d = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).parse(it)
+                java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale.ENGLISH).format(d!!)
+            } catch (e: Exception) { it }
+        }
+        val place = r.optString("place_of_birth").takeIf { it.isNotEmpty() && it != "null" }
+        PersonInfo(
+            id = id,
+            name = r.optString("name"),
+            biography = r.optString("biography").trim().takeIf { it.isNotEmpty() && it != "null" },
+            photo = tmdbImage(r.optString("profile_path").takeIf { it != "null" }, "h632"),
+            born = listOfNotNull(born?.let { "Born $it" }, place).joinToString(" in ").takeIf { it.isNotEmpty() },
+            credits = parseTmdb(arr, "movie"),
         )
     }
 
