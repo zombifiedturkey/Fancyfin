@@ -100,7 +100,7 @@ fun ArrDialog(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         @Composable
                         fun choices(title: String, labels: List<String>, selected: Int, lead: Boolean, pick: (Int) -> Unit) {
-                            Column(Modifier.width(190.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Column(Modifier.width(190.dp).heightIn(max = 230.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(title, color = Palette.TextMuted, fontSize = 11.sp, letterSpacing = 1.2.sp, fontWeight = FontWeight.SemiBold)
                                 labels.forEachIndexed { i, label ->
                                     FocusBox(
