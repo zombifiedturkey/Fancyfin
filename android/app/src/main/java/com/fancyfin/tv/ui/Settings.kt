@@ -132,6 +132,8 @@ private fun SettingRow(label: String, content: @Composable () -> Unit) {
 @Composable
 fun SettingsScreen(onTab: (Tab) -> Unit, onSignOut: () -> Unit) {
     val context = LocalContext.current
+    // Back from Settings goes to Home (the menu's own Back handler still wins while the menu is open).
+    androidx.activity.compose.BackHandler { onTab(Tab.Home) }
     Shell(Tab.Settings, onTab, onSignOut) { contentModifier ->
         Box(Modifier.fillMaxSize().background(Palette.Background)) {
             Column(
