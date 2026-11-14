@@ -245,7 +245,9 @@ fun TitleScreen(
     var focusItem by remember { mutableStateOf(0) }
     val hasSeasons = shown != null && shown.isSeries && seasons.isNotEmpty()
     val hasCast = t != null && t.cast.isNotEmpty()
-    val topLimit = 1 + (if (hasSeasons) 2 else 0) + (if (hasCast) 1 else 0)
+    // The anchor for the home state: the episodes for a show on your server, the cast otherwise.
+    val episodeAnchor = shown != null && shown.isSeries
+    val topLimit = 1 + (if (hasSeasons) 2 else 0) + (if (!episodeAnchor && hasCast) 1 else 0)
     LaunchedEffect(focusItem, topLimit) {
         listState.animateScrollToItem(if (focusItem <= topLimit) 0 else focusItem)
     }

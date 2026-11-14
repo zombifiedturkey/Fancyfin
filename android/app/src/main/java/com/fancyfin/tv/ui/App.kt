@@ -87,8 +87,12 @@ fun FancyfinApp() {
                     Tab.AllMovies, Tab.AllShows -> LibraryScreen(route.tab, client, open, goTab, signOut)
                 }
                 is Route.Genre -> GenreScreen(route.genre, route.types, client, open, play, openTitle, goTab, signOut)
-                is Route.Title -> TitleScreen(route.ref, client, play, openTitle, showTrailer) { p -> stack.add(Route.Person(PersonRef(p.id, p.name, p.photo))) }
-                is Route.Person -> PersonScreen(route.ref, client, openTitle)
+                // Keyed so opening another title from this one (More like this, franchise) starts a fresh page
+                // instead of reusing the old page's state.
+                is Route.Title -> androidx.compose.runtime.key(route.ref) {
+                    TitleScreen(route.ref, client, play, openTitle, showTrailer) { p -> stack.add(Route.Person(PersonRef(p.id, p.name, p.photo))) }
+                }
+                is Route.Person -> androidx.compose.runtime.key(route.ref) { PersonScreen(route.ref, client, openTitle) }
                 is Route.Play -> PlayerScreen(route.item, client, route.sourceId, back)
             }
 
