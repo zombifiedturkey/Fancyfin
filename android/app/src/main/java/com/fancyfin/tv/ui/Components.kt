@@ -44,8 +44,9 @@ import com.fancyfin.tv.data.JellyfinClient
 fun FocusBox(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    shape: RoundedCornerShape = RoundedCornerShape(8.dp),
+    shape: RoundedCornerShape = RoundedCornerShape(UiSettings.corner.card),
     focusedScale: Float = 1.08f,
+    edge: Boolean = true,
     onFocused: () -> Unit = {},
     content: @Composable BoxScope.(focused: Boolean) -> Unit,
 ) {
@@ -55,9 +56,15 @@ fun FocusBox(
         modifier
             .scale(scale)
             .clip(shape)
-            .border(
-                BorderStroke(if (focused) 2.dp else 1.dp, if (focused) Palette.Text else Palette.GlassEdge),
-                shape,
+            .then(
+                // The bright ring around whatever you're on always stays; the faint one at rest is optional.
+                if (focused) {
+                    Modifier.border(BorderStroke(2.dp, Palette.Text), shape)
+                } else if (edge) {
+                    Modifier.border(BorderStroke(1.dp, Palette.GlassEdge), shape)
+                } else {
+                    Modifier
+                },
             )
             .onFocusChanged {
                 focused = it.isFocused
@@ -80,7 +87,7 @@ fun GlassButton(
     FocusBox(
         onClick = onClick,
         modifier = modifier.height(36.dp),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(UiSettings.corner.button),
         focusedScale = 1.06f,
     ) { focused ->
         val fill = when {
@@ -124,6 +131,7 @@ fun ItemCard(
         onClick = onClick,
         modifier = modifier.size(width, height),
         onFocused = onFocused,
+        edge = UiSettings.posterBorder,
     ) {
         Box(Modifier.fillMaxWidth().fillMaxHeight().background(Palette.GlassFill))
         if (url != null) {

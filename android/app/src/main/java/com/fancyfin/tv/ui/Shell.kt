@@ -57,6 +57,7 @@ enum class Tab(val label: String, val section: String) {
     AllMovies("All movies", "Library"),
     AllShows("All shows", "Library"),
     Search("Search", "Library"),
+    Settings("Settings", "System"),
 }
 
 /**
@@ -180,7 +181,7 @@ private fun MenuItem(label: String, selected: Boolean, modifier: Modifier, onCli
     FocusBox(
         onClick = onClick,
         modifier = modifier.fillMaxWidth().height(32.dp),
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(UiSettings.corner.card),
         focusedScale = 1.03f,
     ) { focused ->
         Box(

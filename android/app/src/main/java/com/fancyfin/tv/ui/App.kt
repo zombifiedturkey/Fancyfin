@@ -27,6 +27,7 @@ private sealed class Route {
 @Composable
 fun FancyfinApp() {
     val context = LocalContext.current
+    remember { UiSettings.load(context) }
     val prefs = remember { Prefs(context) }
     val client = remember { JellyfinClient(prefs) }
     var signedIn by remember { mutableStateOf(client.isSignedIn) }
@@ -61,6 +62,7 @@ fun FancyfinApp() {
                 is Route.Main -> when (route.tab) {
                     Tab.Home, Tab.Movies, Tab.Shows -> BrowseScreen(route.tab, client, open, play, goTab, signOut)
                     Tab.Search -> SearchScreen(client, open, goTab, signOut)
+                    Tab.Settings -> SettingsScreen(goTab, signOut)
                     Tab.AllMovies, Tab.AllShows -> LibraryScreen(route.tab, client, open, goTab, signOut)
                 }
                 is Route.Detail -> DetailScreen(route.item, client, play, open)
