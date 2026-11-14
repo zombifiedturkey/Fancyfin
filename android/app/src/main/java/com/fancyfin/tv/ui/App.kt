@@ -39,6 +39,7 @@ fun FancyfinApp() {
     var signedIn by remember { mutableStateOf(client.isSignedIn) }
     val stack = remember { mutableStateListOf<Route>(Route.Main(Tab.Home)) }
     val scope = rememberCoroutineScope()
+    var lastBack by remember { mutableStateOf(0L) }
     var askExit by remember { mutableStateOf(false) }
     var trailer by remember { mutableStateOf<List<String>?>(null) }
     // Each browse page's rows, focus and scroll, so Back lands where you were.
@@ -80,11 +81,19 @@ fun FancyfinApp() {
             // The last stop for Back: step back through the pages, then to Home, then ask before closing.
             // Screens with their own Back handling (menus, dialogs, the Home rows) take it first.
             BackHandler {
+                val now = System.currentTimeMillis()
+                val quick = now - lastBack < 700
+                lastBack = now
                 val here = stack.last()
                 when {
+                    // Two quick presses: all the way back to Home.
+                    quick && (stack.size > 1 || (here is Route.Main && here.tab != Tab.Home)) -> {
+                        stack.clear()
+                        stack.add(Route.Main(Tab.Home))
+                    }
                     stack.size > 1 -> back()
                     here is Route.Main && here.tab != Tab.Home -> goTab(Tab.Home)
-                    else -> askExit = true
+                    !quick -> askExit = true
                 }
             }
             val open: (Item) -> Unit = { item -> stack.add(Route.Title(TitleRef.of(item))) }

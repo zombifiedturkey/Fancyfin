@@ -267,16 +267,7 @@ fun FeatureList(
         }
     }
 
-    // Back: first jump to the start of the row you're on; from there, ask whether to close the app.
-    val atStart = focusRow < sections.size && (selected[focusRow] ?: 0) == 0
-    BackHandler(enabled = listFocused && (!atStart || onExit != null)) {
-        if (focusRow >= sections.size || (selected[focusRow] ?: 0) != 0) {
-            val row = if (focusRow >= sections.size) 0 else focusRow
-            try { requesters[row]?.get(0)?.requestFocus() } catch (e: Exception) { /* row not on screen */ }
-        } else {
-            onExit?.invoke()
-        }
-    }
+    // Back is handled by the app: one press goes back a page, two quick presses go Home.
 
     fun wallpaperFor(e: HeroEntry): String? =
         if (e.backdrop?.contains("image.tmdb.org") == true) smallTmdb(e.backdrop)
