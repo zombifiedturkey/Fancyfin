@@ -130,7 +130,10 @@ export function IdentifyDialog({
 							disabled={apply.isPending}
 							onClick={() => {
 								// The server takes a while, so close at once and let it queue up in the background.
-								apply.mutate({ result: chosen, replaceAllImages: replaceImages });
+								apply.mutate({
+									result: chosen,
+									replaceAllImages: replaceImages,
+								});
 								onClose();
 							}}
 							className={`${button} bg-ink text-canvas`}
