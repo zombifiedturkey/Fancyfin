@@ -1,8 +1,8 @@
-import { AnimatePresence, motion } from "motion/react";
 import { Link } from "@tanstack/react-router";
+import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
-import { useIsAdmin } from "../lib/admin-queries";
 import { useAuth, useSession } from "../auth/AuthProvider";
+import { useIsAdmin } from "../lib/admin-queries";
 import { SettingsDialog } from "./SettingsDialog";
 import { UserAvatar } from "./UserAvatar";
 

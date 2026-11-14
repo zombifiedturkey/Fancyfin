@@ -26,13 +26,19 @@ describe("attentionReasons", () => {
 	});
 
 	it("accepts any one of the known ids", () => {
-		expect(attentionReasons({ ...fine, ProviderIds: { Imdb: "tt0113277" } })).toEqual([]);
-		expect(attentionReasons({ ...fine, ProviderIds: { Tvdb: "81189" } })).toEqual([]);
+		expect(
+			attentionReasons({ ...fine, ProviderIds: { Imdb: "tt0113277" } }),
+		).toEqual([]);
+		expect(
+			attentionReasons({ ...fine, ProviderIds: { Tvdb: "81189" } }),
+		).toEqual([]);
 	});
 
 	it("flags a missing poster and a missing description", () => {
 		expect(attentionReasons({ ...fine, ImageTags: {} })).toEqual(["poster"]);
-		expect(attentionReasons({ ...fine, Overview: "  " })).toEqual(["description"]);
+		expect(attentionReasons({ ...fine, Overview: "  " })).toEqual([
+			"description",
+		]);
 	});
 
 	it("lists everything that is missing, in order", () => {

@@ -5,13 +5,13 @@ import {
 	Outlet,
 } from "@tanstack/react-router";
 import { AppLayout } from "./routes/AppLayout";
+import { AttentionPage } from "./routes/Attention";
 import {
 	MoviesBrowsePage,
 	MoviesGenrePage,
 	ShowsBrowsePage,
 	ShowsGenrePage,
 } from "./routes/Browse";
-import { AttentionPage } from "./routes/Attention";
 import { Home } from "./routes/Home";
 import { ItemPage } from "./routes/Item";
 import { MoviesLibraryPage, ShowsLibraryPage } from "./routes/Library";

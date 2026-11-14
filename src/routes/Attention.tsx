@@ -5,11 +5,11 @@ import { EditDetailsDialog } from "../components/EditDetailsDialog";
 import { FadeImage } from "../components/FadeImage";
 import { IdentifyDialog } from "../components/IdentifyDialog";
 import { useIsAdmin, useRefreshItem } from "../lib/admin-queries";
+import { type AttentionReason, REASON_LABEL } from "../lib/attention";
 import {
-	type AttentionReason,
-	REASON_LABEL,
-} from "../lib/attention";
-import { type AttentionItem, useAttentionItems } from "../lib/attention-queries";
+	type AttentionItem,
+	useAttentionItems,
+} from "../lib/attention-queries";
 import { posterImage } from "../lib/images";
 
 type KindFilter = "all" | "Movie" | "Series";
@@ -60,7 +60,10 @@ function Row({ entry, canFix }: { entry: AttentionItem; canFix: boolean }) {
 					</span>
 				</p>
 				{item.Path && (
-					<p className="mt-0.5 truncate text-xs text-ink-faint" title={item.Path}>
+					<p
+						className="mt-0.5 truncate text-xs text-ink-faint"
+						title={item.Path}
+					>
 						{item.Path}
 					</p>
 				)}
@@ -114,10 +117,16 @@ function Row({ entry, canFix }: { entry: AttentionItem; canFix: boolean }) {
 				</div>
 			)}
 			{identifying && (
-				<IdentifyDialog item={item as BaseItemDto} onClose={() => setIdentifying(false)} />
+				<IdentifyDialog
+					item={item as BaseItemDto}
+					onClose={() => setIdentifying(false)}
+				/>
 			)}
 			{editing && (
-				<EditDetailsDialog item={item as BaseItemDto} onClose={() => setEditing(false)} />
+				<EditDetailsDialog
+					item={item as BaseItemDto}
+					onClose={() => setEditing(false)}
+				/>
 			)}
 		</li>
 	);
@@ -150,8 +159,8 @@ export function AttentionPage() {
 			</h1>
 			<p className="mt-2 max-w-2xl text-sm text-ink-muted">
 				Movies and shows with missing metadata: never matched to TMDb, or no
-				poster or description. Fix match picks the right title; it fills in
-				the rest.
+				poster or description. Fix match picks the right title; it fills in the
+				rest.
 			</p>
 
 			<div className="mt-5 flex flex-wrap gap-2">
@@ -162,7 +171,11 @@ export function AttentionPage() {
 						onClick={() => setKind(key)}
 						className={`${pill} ${kind === key ? pillOn : ""}`}
 					>
-						{key === "all" ? "Movies and shows" : key === "Movie" ? "Movies" : "Shows"}
+						{key === "all"
+							? "Movies and shows"
+							: key === "Movie"
+								? "Movies"
+								: "Shows"}
 					</button>
 				))}
 				<span className="mx-1 w-px self-stretch bg-glass-border" />
