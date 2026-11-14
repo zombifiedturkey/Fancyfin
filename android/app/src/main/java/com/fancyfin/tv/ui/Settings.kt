@@ -74,6 +74,9 @@ object UiSettings {
         private set
     var backgroundPicture by mutableStateOf(true)
         private set
+    /** Ask which quality profile, folder and season to use when adding to Radarr / Sonarr. */
+    var askArr by mutableStateOf(true)
+        private set
 
     private var prefs: SharedPreferences? = null
 
@@ -86,6 +89,26 @@ object UiSettings {
         glass = Glass.values().firstOrNull { it.name == p.getString("ui_glass", null) } ?: Glass.Balanced
         accent = AccentChoice.values().firstOrNull { it.name == p.getString("ui_accent", null) } ?: AccentChoice.Teal
         backgroundPicture = p.getBoolean("ui_bg_picture", true)
+        askArr = p.getBoolean("ui_ask_arr", true)
+    }
+
+    fun chooseAskArr(value: Boolean) {
+        askArr = value
+        prefs?.edit()?.putBoolean("ui_ask_arr", value)?.apply()
+    }
+
+    /** The profile and folder last remembered for "movie" or "series", or null if none. */
+    fun savedArr(kind: String): Pair<Int, String>? {
+        val p = prefs ?: return null
+        val folder = p.getString("arr_${kind}_folder", null) ?: return null
+        val profile = p.getInt("arr_${kind}_profile", -1)
+        return if (profile >= 0) profile to folder else null
+    }
+
+    /** Remember these choices and stop asking, until the Settings toggle is switched back on. */
+    fun rememberArr(kind: String, profile: Int, folder: String) {
+        prefs?.edit()?.putInt("arr_${kind}_profile", profile)?.putString("arr_${kind}_folder", folder)?.apply()
+        chooseAskArr(false)
     }
 
     fun chooseCorner(value: Corner) {
@@ -182,6 +205,11 @@ fun SettingsScreen(onTab: (Tab) -> Unit, onSignOut: () -> Unit) {
                 SettingRow("Up next row on the home screen") {
                     GlassButton("On", { UiSettings.chooseUpNext(true) }, primary = UiSettings.showUpNext)
                     GlassButton("Off", { UiSettings.chooseUpNext(false) }, primary = !UiSettings.showUpNext)
+                }
+
+                SettingRow("Ask for quality profile, folder and season when adding to Radarr / Sonarr") {
+                    GlassButton("On", { UiSettings.chooseAskArr(true) }, primary = UiSettings.askArr)
+                    GlassButton("Off", { UiSettings.chooseAskArr(false) }, primary = !UiSettings.askArr)
                 }
 
                 SettingRow("Preview") {

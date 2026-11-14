@@ -623,12 +623,10 @@ class JellyfinClient(private val prefs: Prefs) {
         } catch (e: Exception) { null }
     }
 
-    /**
-     * Adds a movie to Radarr or a show to Sonarr, using the first quality profile and root folder it has
-     * and searching straight away, the same defaults as the web version's quick add. Returns what to tell
-     * the person; throws ApiException with a readable message when it can't.
-     */
-    suspend fun addToArr(kind: String, tmdbId: Int): String = withContext(Dispatchers.IO) {
+    /** Quality profiles, root folders and (for shows) seasons the Add dialog offers. */
+    class ArrOptions(val profiles: List<Pair<Int, String>>, val folders: List<String>, val seasons: List<Int>)
+
+    private fun arrLookup(kind: String, tmdbId: Int): JSONObject {
         val movie = kind == "movie"
         val app = if (movie) "radarr" else "sonarr"
         val label = if (movie) "Radarr" else "Sonarr"
@@ -639,40 +637,82 @@ class JellyfinClient(private val prefs: Prefs) {
             "tvdb:" + (tvdbId(tmdbId) ?: throw ApiException("TMDB has no TVDB id for this show, so Sonarr can't find it."))
         }
         val found = JSONArray(request(fancyfin, arrPath(app, "$what/lookup?term=" + URLEncoder.encode(term, "UTF-8"))))
-        var candidate: JSONObject? = null
         for (i in 0 until found.length()) {
             val c = found.getJSONObject(i)
             val match = if (movie) c.optInt("tmdbId") == tmdbId else ("tvdb:" + c.optInt("tvdbId")) == term
-            if (match) { candidate = c; break }
+            if (match) return c
         }
-        if (candidate == null) throw ApiException("$label didn't return an exact match for this title.")
-        if (candidate.optInt("id") > 0) return@withContext "Already in $label."
+        throw ApiException("$label didn't return an exact match for this title.")
+    }
 
+    suspend fun arrOptions(kind: String, tmdbId: Int): ArrOptions = withContext(Dispatchers.IO) {
+        val movie = kind == "movie"
+        val app = if (movie) "radarr" else "sonarr"
+        val label = if (movie) "Radarr" else "Sonarr"
         val profiles = JSONArray(request(fancyfin, arrPath(app, "qualityprofile")))
         val folders = JSONArray(request(fancyfin, arrPath(app, "rootfolder")))
         if (profiles.length() == 0 || folders.length() == 0) {
             throw ApiException("$label has no quality profile or root folder to add to.")
         }
-        val body = JSONObject(candidate.toString())
-        body.remove("id")
-        body.put("qualityProfileId", profiles.getJSONObject(0).getInt("id"))
-        body.put("rootFolderPath", folders.getJSONObject(0).getString("path"))
-        body.put("monitored", true)
-        if (movie) {
-            body.put("minimumAvailability", "released")
-            body.put("addOptions", JSONObject().put("monitor", "movieOnly").put("searchForMovie", true))
-        } else {
-            body.put("seasonFolder", true)
-            val type = candidate.optString("seriesType")
-            body.put("seriesType", if (type == "standard" || type == "daily" || type == "anime") type else "standard")
-            body.put(
-                "addOptions",
-                JSONObject().put("monitor", "all").put("searchForMissingEpisodes", true).put("searchForCutoffUnmetEpisodes", false),
-            )
+        val seasons = ArrayList<Int>()
+        if (!movie) {
+            val list = arrLookup(kind, tmdbId).optJSONArray("seasons")
+            if (list != null) for (i in 0 until list.length()) {
+                val n = list.getJSONObject(i).optInt("seasonNumber")
+                if (n > 0) seasons.add(n)
+            }
         }
-        request(fancyfin, arrPath(app, what), "POST", body)
-        "Added to $label. It's searching for a copy now."
+        ArrOptions(
+            (0 until profiles.length()).map { profiles.getJSONObject(it).let { o -> o.getInt("id") to o.optString("name") } },
+            (0 until folders.length()).map { folders.getJSONObject(it).getString("path") },
+            seasons.sorted(),
+        )
     }
+
+    /**
+     * Adds a movie to Radarr or a show to Sonarr and searches straight away. The profile and folder are
+     * the ones given (the first of each when null); `season` adds just that season of a show.
+     * Returns what to tell the person; throws ApiException with a readable message when it can't.
+     */
+    suspend fun addToArr(kind: String, tmdbId: Int, profileId: Int? = null, folder: String? = null, season: Int? = null): String =
+        withContext(Dispatchers.IO) {
+            val movie = kind == "movie"
+            val app = if (movie) "radarr" else "sonarr"
+            val label = if (movie) "Radarr" else "Sonarr"
+            val what = if (movie) "movie" else "series"
+            val candidate = arrLookup(kind, tmdbId)
+            if (candidate.optInt("id") > 0) return@withContext "Already in $label."
+
+            val options = if (profileId == null || folder == null) arrOptions(kind, tmdbId) else null
+            val body = JSONObject(candidate.toString())
+            body.remove("id")
+            body.put("qualityProfileId", profileId ?: options!!.profiles[0].first)
+            body.put("rootFolderPath", folder ?: options!!.folders[0])
+            body.put("monitored", true)
+            if (movie) {
+                body.put("minimumAvailability", "released")
+                body.put("addOptions", JSONObject().put("monitor", "movieOnly").put("searchForMovie", true))
+            } else {
+                body.put("seasonFolder", true)
+                val type = candidate.optString("seriesType")
+                body.put("seriesType", if (type == "standard" || type == "daily" || type == "anime") type else "standard")
+                val add = JSONObject().put("searchForMissingEpisodes", true).put("searchForCutoffUnmetEpisodes", false)
+                if (season == null) {
+                    add.put("monitor", "all")
+                } else {
+                    // Only the chosen season is monitored, so only it gets searched.
+                    val seasons = body.optJSONArray("seasons") ?: JSONArray()
+                    for (i in 0 until seasons.length()) {
+                        val o = seasons.getJSONObject(i)
+                        o.put("monitored", o.optInt("seasonNumber") == season)
+                    }
+                    body.put("seasons", seasons)
+                }
+                body.put("addOptions", add)
+            }
+            request(fancyfin, arrPath(app, what), "POST", body)
+            "Added to $label" + (if (season != null) " (season $season)" else "") + ". It's searching for a copy now."
+        }
 
     private val statusCache = HashMap<Int, String>()
 

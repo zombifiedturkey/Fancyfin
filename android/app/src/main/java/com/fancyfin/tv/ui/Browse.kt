@@ -97,6 +97,8 @@ class HeroSection(
     val entries: List<HeroEntry>,
     val mini: Boolean = false,
     val genre: String? = null,
+    /** OK plays the title (resuming) instead of opening its page. */
+    val playDirect: Boolean = false,
 )
 
 /** The grid of everything at the bottom of a genre page, with its sort buttons. */
@@ -282,7 +284,7 @@ fun FeatureList(
                                 scope.launch { e.status = client.releaseStatus(e.tmdbId) }
                             }
                         },
-                        onClick = { e -> if (e.isMore) onMore(section.genre ?: "") else onPlay(e) },
+                        onClick = { e -> if (e.isMore) onMore(section.genre ?: "") else if (section.playDirect && e.onServer != null) onDetails(e) else onPlay(e) },
                         onLongClick = { e -> if (!e.isMore) onDetails(e) },
                     )
                 }
@@ -380,7 +382,7 @@ fun BrowseScreen(
             loading = false
 
             val resume = client.resume().filter { if (tab == Tab.Movies) it.isMovie else if (tab == Tab.Shows) it.isEpisode else true }
-            if (resume.isNotEmpty()) sections = sections + HeroSection("Continue watching", resume.map { itemEntry(it, client) })
+            if (resume.isNotEmpty()) sections = sections + HeroSection("Continue watching", resume.map { itemEntry(it, client) }, playDirect = true)
 
             if (tab != Tab.Movies && UiSettings.showUpNext) {
                 val resumeIds = resume.map { it.id }.toSet()
@@ -490,7 +492,7 @@ fun GenreScreen(
 
             val ids = everything.map { it.id }.toSet()
             val resume = client.resume().filter { it.id in ids || (it.seriesId != null && it.seriesId in ids) }
-            if (resume.isNotEmpty()) sections = sections + HeroSection("Continue watching", resume.map { itemEntry(it, client) })
+            if (resume.isNotEmpty()) sections = sections + HeroSection("Continue watching", resume.map { itemEntry(it, client) }, playDirect = true)
 
             val recent = client.genreLibrary(genre, types, "DateCreated", true, 15)
             if (recent.isNotEmpty()) sections = sections + HeroSection("Recently added", recent.map { itemEntry(it, client) })

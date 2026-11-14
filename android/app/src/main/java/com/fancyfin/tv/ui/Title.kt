@@ -152,11 +152,27 @@ fun TitleScreen(
     // Radarr / Sonarr: null = not added, "adding", "added", or "in" (it was already there).
     var arrState by remember { mutableStateOf<String?>(null) }
     var arrNote by remember { mutableStateOf<String?>(null) }
+    var arrDialog by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf<String?>(null) }
     // The episode you're on in the episodes row; its description replaces the show's while you're there.
     var focusedEp by remember { mutableStateOf<Item?>(null) }
     var tmdbId by remember { mutableStateOf(ref.tmdbId) }
     val kind = ref.kind
+
+    fun startAdd(id: Int, profile: Int?, folder: String?, season: Int?) {
+        arrState = "adding"
+        arrNote = null
+        scope.launch {
+            try {
+                val message = client.addToArr(kind, id, profile, folder, season)
+                arrNote = message
+                arrState = if (message.startsWith("Already")) "in" else "added"
+            } catch (e: Exception) {
+                arrNote = e.message ?: "Couldn't add it."
+                arrState = null
+            }
+        }
+    }
 
     LaunchedEffect(ref) {
         val start = ref.server
@@ -363,18 +379,9 @@ fun TitleScreen(
                                     modifier = lead(),
                                     onClick = {
                                         if (arrState == null) {
-                                            arrState = "adding"
-                                            arrNote = null
-                                            scope.launch {
-                                                try {
-                                                    val message = client.addToArr(kind, addId)
-                                                    arrNote = message
-                                                    arrState = if (message.startsWith("Already")) "in" else "added"
-                                                } catch (e: Exception) {
-                                                    arrNote = e.message ?: "Couldn't add it."
-                                                    arrState = null
-                                                }
-                                            }
+                                            val saved = UiSettings.savedArr(kind)
+                                            if (UiSettings.askArr || saved == null) arrDialog = true
+                                            else startAdd(addId, saved.first, saved.second, null)
                                         }
                                     },
                                 )
@@ -573,6 +580,21 @@ fun TitleScreen(
                     }
                 }
             }
+        }
+        val dialogId = tmdbId
+        if (arrDialog && dialogId != null) {
+            ArrDialog(
+                app = if (kind == "movie") "Radarr" else "Sonarr",
+                kind = kind,
+                tmdbId = dialogId,
+                client = client,
+                onAdd = { profile, folder, season, remember ->
+                    if (remember) UiSettings.rememberArr(kind, profile, folder)
+                    arrDialog = false
+                    startAdd(dialogId, profile, folder, season)
+                },
+                onClose = { arrDialog = false },
+            )
         }
     }
 }
