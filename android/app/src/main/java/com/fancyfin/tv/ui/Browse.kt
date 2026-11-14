@@ -27,6 +27,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.activity.compose.BackHandler
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -44,6 +49,12 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -75,7 +86,10 @@ class HeroEntry(
     val progress: Float? = null,
     val action: String = "Play",
     val isMore: Boolean = false,
-)
+) {
+    /** Release status for movies that aren't on the server, filled in when you reach the tile. */
+    var status by mutableStateOf<String?>(null)
+}
 
 /** A feature row: one big tile plus narrow ones. `mini` is the smaller version used for genres. */
 class HeroSection(
@@ -155,6 +169,75 @@ private fun playEntry(
     }
 }
 
+/** Find the trailer and open it full screen in the YouTube app (or the browser if there isn't one). */
+private fun trailerEntry(
+    e: HeroEntry,
+    scope: CoroutineScope,
+    client: JellyfinClient,
+    context: Context,
+    say: (String) -> Unit,
+) {
+    scope.launch {
+        try {
+            val server = e.onServer
+            var id = e.tmdbId
+            var kind = e.kind
+            if (id == null && server != null) {
+                val series = if (server.isEpisode && server.seriesId != null) client.item(server.seriesId) else server
+                id = series.tmdbId?.toIntOrNull()
+                kind = if (series.isMovie) "movie" else "tv"
+            }
+            val key = if (id != null) client.trailerKey(kind, id) else null
+            if (key == null) {
+                say("No trailer found for “${e.title}”.")
+                return@launch
+            }
+            val app = Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:$key")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            try {
+                context.startActivity(app)
+            } catch (x: Exception) {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$key")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }
+        } catch (x: Exception) {
+            say("Couldn't open the trailer.")
+        }
+    }
+}
+
+/** "Close Fancyfin?" in glass. Back or Stay dismisses it. */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun ExitPrompt(onStay: () -> Unit, onClose: () -> Unit) {
+    val stay = remember { FocusRequester() }
+    BackHandler { onStay() }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(80)
+        try { stay.requestFocus() } catch (e: Exception) { /* not laid out yet */ }
+    }
+    val panel = RoundedCornerShape(UiSettings.corner.tile)
+    Box(Modifier.fillMaxSize().background(Color(0xB3000000)), contentAlignment = Alignment.Center) {
+        Column(
+            Modifier
+                .width(380.dp)
+                .background(Color(0xF0151922), panel)
+                .border(1.dp, Palette.GlassEdge, panel)
+                .focusProperties { exit = { FocusRequester.Cancel } }
+                .focusGroup()
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("Close Fancyfin?", color = Palette.Text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("You'll go back to the Shield home screen.", color = Palette.TextMuted, fontSize = 13.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                GlassButton("Stay", onStay, modifier = Modifier.focusRequester(stay), primary = true)
+                GlassButton("Close Fancyfin", onClose, clear = true)
+            }
+        }
+    }
+}
+
 /**
  * The feature rows (and, on a genre page, the grid beneath them). Only the row you're on shows its big
  * tile. Moving down pins the next row to the top of the screen and lands on its first tile, unless
@@ -172,7 +255,11 @@ fun FeatureList(
     onDetails: (HeroEntry) -> Unit,
     onMore: (String) -> Unit,
     onOpenItem: (Item) -> Unit,
+    onTrailer: (HeroEntry) -> Unit,
+    onExit: (() -> Unit)?,
 ) {
+    val scope = rememberCoroutineScope()
+    var listFocused by remember { mutableStateOf(false) }
     val selected = remember { mutableStateMapOf<Int, Int>() }
     var focusRow by remember { mutableStateOf(0) }
     val columnState = rememberLazyListState()
@@ -181,13 +268,24 @@ fun FeatureList(
 
     LaunchedEffect(focusRow) { columnState.animateScrollToItem(focusRow) }
 
+    // Back: first jump to the start of the row you're on; from there, ask whether to close the app.
+    val atStart = focusRow < sections.size && (selected[focusRow] ?: 0) == 0
+    BackHandler(enabled = listFocused && (!atStart || onExit != null)) {
+        if (focusRow >= sections.size || (selected[focusRow] ?: 0) != 0) {
+            val row = if (focusRow >= sections.size) 0 else focusRow
+            try { requesters[row]?.get(0)?.requestFocus() } catch (e: Exception) { /* row not on screen */ }
+        } else {
+            onExit?.invoke()
+        }
+    }
+
     fun wallpaperFor(e: HeroEntry): String? =
         if (e.backdrop?.contains("image.tmdb.org") == true) smallTmdb(e.backdrop)
         else e.onServer?.let { client.backdrop(it, 96) } ?: smallTmdb(e.backdrop)
 
     CompositionLocalProvider(LocalBringIntoViewSpec provides NoAutoScroll) {
         LazyColumn(
-            modifier.fillMaxSize(),
+            modifier.fillMaxSize().onFocusChanged { listFocused = it.hasFocus },
             state = columnState,
             contentPadding = PaddingValues(top = 24.dp, bottom = 300.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -196,7 +294,7 @@ fun FeatureList(
                 Column {
                     Text(
                         section.title, color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(start = 48.dp, bottom = 8.dp),
+                        modifier = Modifier.padding(start = 20.dp, bottom = 8.dp),
                     )
                     HeroRow(
                         entries = section.entries,
@@ -210,9 +308,13 @@ fun FeatureList(
                             focusRow = si
                             val e = section.entries[i]
                             if (!e.isMore) onWallpaper(wallpaperFor(e))
+                            if (e.onServer == null && e.kind == "movie" && e.tmdbId != null && e.status == null) {
+                                scope.launch { e.status = client.releaseStatus(e.tmdbId) }
+                            }
                         },
                         onClick = { e -> if (e.isMore) onMore(section.genre ?: "") else onPlay(e) },
                         onLongClick = { e -> if (!e.isMore) onDetails(e) },
+                        onTrailer = onTrailer,
                     )
                 }
             }
@@ -223,9 +325,9 @@ fun FeatureList(
                     Column {
                         Text(
                             "All titles", color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(start = 48.dp, bottom = 8.dp),
+                            modifier = Modifier.padding(start = 20.dp, bottom = 8.dp),
                         )
-                        Row(Modifier.padding(start = 48.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(Modifier.padding(start = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             grid.labels.forEachIndexed { i, label ->
                                 GlassButton(label, { grid.onSelect(i) }, primary = i == grid.selected, clear = true, onFocused = { focusRow = base })
                             }
@@ -233,7 +335,7 @@ fun FeatureList(
                     }
                 }
                 itemsIndexed(grid.items.chunked(8)) { r, chunk ->
-                    Row(Modifier.padding(start = 48.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(Modifier.padding(start = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         chunk.forEach { item ->
                             ItemCard(
                                 item = item, client = client, width = 96.dp, height = 144.dp, landscape = false,
@@ -266,6 +368,8 @@ fun BrowseScreen(
     onSignOut: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var askExit by remember { mutableStateOf(false) }
     var sections by remember(tab) { mutableStateOf<List<HeroSection>>(emptyList()) }
     var loading by remember(tab) { mutableStateOf(true) }
     var failed by remember(tab) { mutableStateOf(false) }
@@ -335,8 +439,8 @@ fun BrowseScreen(
         Box(Modifier.fillMaxSize()) {
             Backdrop(wallpaper)
             when {
-                failed -> Text("Couldn't reach your server.", color = Palette.Accent, fontSize = 14.sp, modifier = Modifier.padding(48.dp))
-                loading -> Text("Loading…", color = Palette.TextMuted, fontSize = 14.sp, modifier = Modifier.padding(48.dp))
+                failed -> Text("Couldn't reach your server.", color = Palette.Accent, fontSize = 14.sp, modifier = Modifier.padding(20.dp))
+                loading -> Text("Loading…", color = Palette.TextMuted, fontSize = 14.sp, modifier = Modifier.padding(20.dp))
                 else -> key(tab) {
                     FeatureList(
                         modifier = contentModifier,
@@ -348,13 +452,16 @@ fun BrowseScreen(
                         onDetails = { e -> e.onServer?.let(onOpen) },
                         onMore = { genre -> onGenre(genre, types) },
                         onOpenItem = onOpen,
+                        onTrailer = { e -> trailerEntry(e, scope, client, context) { message = it } },
+                        onExit = { askExit = true },
                     )
                 }
             }
+            if (askExit) ExitPrompt(onStay = { askExit = false }, onClose = { (context as? android.app.Activity)?.finish() })
             message?.let {
                 Text(
                     it, color = Palette.Text, fontSize = 12.sp,
-                    modifier = Modifier.align(Alignment.BottomStart).padding(start = 48.dp, bottom = 24.dp)
+                    modifier = Modifier.align(Alignment.BottomStart).padding(start = 20.dp, bottom = 24.dp)
                         .background(Color(0xB3000000), RoundedCornerShape(UiSettings.corner.button))
                         .padding(horizontal = 14.dp, vertical = 8.dp),
                 )
@@ -378,6 +485,7 @@ fun GenreScreen(
     onSignOut: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var sections by remember(genre) { mutableStateOf<List<HeroSection>>(emptyList()) }
     var allItems by remember(genre) { mutableStateOf<List<Item>>(emptyList()) }
     var sortIndex by remember(genre) { mutableStateOf(1) }
@@ -435,8 +543,8 @@ fun GenreScreen(
         Box(Modifier.fillMaxSize()) {
             Backdrop(wallpaper)
             when {
-                failed -> Text("Couldn't reach your server.", color = Palette.Accent, fontSize = 14.sp, modifier = Modifier.padding(48.dp))
-                loading -> Text("Loading…", color = Palette.TextMuted, fontSize = 14.sp, modifier = Modifier.padding(48.dp))
+                failed -> Text("Couldn't reach your server.", color = Palette.Accent, fontSize = 14.sp, modifier = Modifier.padding(20.dp))
+                loading -> Text("Loading…", color = Palette.TextMuted, fontSize = 14.sp, modifier = Modifier.padding(20.dp))
                 else -> key(genre) {
                     FeatureList(
                         modifier = contentModifier,
@@ -448,13 +556,15 @@ fun GenreScreen(
                         onDetails = { e -> e.onServer?.let(onOpen) },
                         onMore = {},
                         onOpenItem = onOpen,
+                        onTrailer = { e -> trailerEntry(e, scope, client, context) { message = it } },
+                        onExit = null,
                     )
                 }
             }
             message?.let {
                 Text(
                     it, color = Palette.Text, fontSize = 12.sp,
-                    modifier = Modifier.align(Alignment.BottomStart).padding(start = 48.dp, bottom = 24.dp)
+                    modifier = Modifier.align(Alignment.BottomStart).padding(start = 20.dp, bottom = 24.dp)
                         .background(Color(0xB3000000), RoundedCornerShape(UiSettings.corner.button))
                         .padding(horizontal = 14.dp, vertical = 8.dp),
                 )
@@ -480,6 +590,7 @@ private fun HeroRow(
     onSelect: (Int) -> Unit,
     onClick: (HeroEntry) -> Unit,
     onLongClick: (HeroEntry) -> Unit,
+    onTrailer: (HeroEntry) -> Unit,
 ) {
     LaunchedEffect(expandedIndex) {
         if (expandedIndex != null) listState.animateScrollToItem((expandedIndex - 1).coerceAtLeast(0))
@@ -491,7 +602,7 @@ private fun HeroRow(
                 .focusGroup(),
             state = listState,
             horizontalArrangement = Arrangement.spacedBy(if (mini) 8.dp else 10.dp),
-            contentPadding = PaddingValues(horizontal = 48.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp),
         ) {
             itemsIndexed(entries) { index, entry ->
                 val requester = remember { FocusRequester() }
@@ -507,6 +618,7 @@ private fun HeroRow(
                     onFocused = { onSelect(index) },
                     onClick = { onClick(entry) },
                     onLongClick = { onLongClick(entry) },
+                    onTrailer = { onTrailer(entry) },
                 )
             }
         }
@@ -523,8 +635,11 @@ private fun HeroTile(
     onFocused: () -> Unit,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    onTrailer: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
+    // Right on the Play button moves to Trailer; Right again moves on to the next tile.
+    var trailerSelected by remember { mutableStateOf(false) }
     val narrow = if (mini) 100.dp else 118.dp
     val wide = if (mini) 312.dp else 520.dp
     val tall = if (mini) 150.dp else 250.dp
@@ -541,12 +656,18 @@ private fun HeroTile(
                 else if (UiSettings.posterBorder) Modifier.border(1.dp, Palette.GlassEdge, shape)
                 else Modifier,
             )
+            .onPreviewKeyEvent { event ->
+                if (!expanded || event.type != KeyEventType.KeyDown) false
+                else if (event.key == Key.DirectionRight && !trailerSelected) { trailerSelected = true; true }
+                else if (event.key == Key.DirectionLeft && trailerSelected) { trailerSelected = false; true }
+                else false
+            }
             .focusRequester(focusRequester)
             .onFocusChanged {
                 focused = it.isFocused
-                if (it.isFocused) onFocused()
+                if (it.isFocused) onFocused() else trailerSelected = false
             }
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            .combinedClickable(onClick = { if (expanded && trailerSelected) onTrailer() else onClick() }, onLongClick = onLongClick),
     ) {
         Box(Modifier.fillMaxSize().background(Palette.GlassFill))
 
@@ -580,7 +701,9 @@ private fun HeroTile(
                     .padding(start = if (mini) 12.dp else 20.dp, top = if (mini) 10.dp else 18.dp, bottom = if (mini) 10.dp else 18.dp),
                 verticalArrangement = Arrangement.Bottom,
             ) {
-                if (!mini) Text(if (entry.kind == "movie") "MOVIE" else "SERIES", color = Palette.Accent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                val kindLabel = if (entry.kind == "movie") "MOVIE" else "SERIES"
+                val top = if (entry.onServer == null && entry.status != null) (if (mini) entry.status!!.uppercase() else kindLabel + "  ·  " + entry.status!!.uppercase()) else if (mini) null else kindLabel
+                if (top != null) Text(top, color = Palette.Accent, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(entry.title, color = Palette.Text, fontSize = titleSize, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 entry.subtitle?.let { Text(it, color = Palette.Text, fontSize = if (mini) 10.sp else 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                 val facts = listOfNotNull(
@@ -593,16 +716,31 @@ private fun HeroTile(
                     Text(it, color = Palette.TextMuted, fontSize = small, maxLines = if (mini) 2 else 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
                 }
                 val here = entry.onServer != null
-                Box(
-                    Modifier.padding(top = if (mini) 6.dp else 10.dp).height(if (mini) 22.dp else 30.dp)
-                        .background(if (here) Palette.Accent else Palette.GlassFillStrong, RoundedCornerShape(UiSettings.corner.button.coerceAtMost(if (mini) 11.dp else 15.dp)))
-                        .padding(horizontal = if (mini) 10.dp else 16.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        if (here) "▶  ${entry.action}" else "Not on your server",
-                        color = if (here) Color.Black else Palette.Text, fontSize = small, fontWeight = FontWeight.SemiBold,
-                    )
+                val round = RoundedCornerShape(UiSettings.corner.button.coerceAtMost(if (mini) 11.dp else 15.dp))
+                val h = if (mini) 22.dp else 30.dp
+                val pad = if (mini) 10.dp else 16.dp
+                Row(Modifier.padding(top = if (mini) 6.dp else 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(
+                        Modifier.height(h)
+                            .then(if (focused && !trailerSelected) Modifier.border(2.dp, Palette.Text, round) else Modifier)
+                            .background(if (here) Palette.Accent else Palette.GlassFillStrong, round)
+                            .padding(horizontal = pad),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            if (here) "▶  ${entry.action}" else "Not on your server",
+                            color = if (here) Color.Black else Palette.Text, fontSize = small, fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                    Box(
+                        Modifier.height(h)
+                            .then(if (focused && trailerSelected) Modifier.border(2.dp, Palette.Text, round) else Modifier)
+                            .background(Palette.GlassFillStrong, round)
+                            .padding(horizontal = pad),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("Trailer", color = Palette.Text, fontSize = small, fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
         }

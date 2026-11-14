@@ -24,7 +24,7 @@ import java.net.URL
 object Updater {
     private const val TAG_PREFIX = "tv-v"
     private const val KEY_LAST_CHECK = "lastUpdateCheck"
-    private const val QUIET_INTERVAL_MS = 6L * 60 * 60 * 1000
+    private const val QUIET_INTERVAL_MS = 1L * 60 * 60 * 1000
 
     private class Release(
         val version: String,
@@ -105,6 +105,7 @@ object Updater {
         }
 
         val releases = JSONArray(body)
+        var best: Release? = null
         for (i in 0 until releases.length()) {
             val release = releases.getJSONObject(i)
             val tag = release.optString("tag_name")
@@ -114,16 +115,21 @@ object Updater {
             for (j in 0 until assets.length()) {
                 val asset = assets.getJSONObject(j)
                 if (asset.optString("name").endsWith(".apk")) {
-                    return Release(
-                        version = tag.removePrefix(TAG_PREFIX),
-                        notes = release.optString("body"),
-                        apkUrl = asset.getString("browser_download_url"),
-                        size = asset.optLong("size"),
-                    )
+                    val version = tag.removePrefix(TAG_PREFIX)
+                    // GitHub lists releases by creation date, which isn't always version order.
+                    if (best == null || isNewer(version, best.version)) {
+                        best = Release(
+                            version = version,
+                            notes = release.optString("body"),
+                            apkUrl = asset.getString("browser_download_url"),
+                            size = asset.optLong("size"),
+                        )
+                    }
+                    break
                 }
             }
         }
-        return null
+        return best
     }
 
     private fun offer(activity: Activity, release: Release) {

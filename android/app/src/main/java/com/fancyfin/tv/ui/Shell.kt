@@ -145,6 +145,11 @@ fun Shell(
     ) {
         content(Modifier.focusRequester(contentFocus).focusGroup())
 
+        // Dim what's behind the menu so the text in it stays easy to read.
+        AnimatedVisibility(visible = open, enter = fadeIn(), exit = fadeOut()) {
+            Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Color(0xCC000000), 0.5f to Color(0x66000000), 1f to Color(0x00000000))))
+        }
+
         AnimatedVisibility(
             visible = open,
             enter = slideInHorizontally { -it } + fadeIn(),
@@ -158,7 +163,7 @@ fun Shell(
                     .fillMaxHeight()
                     .clip(panel)
                     // Dark glass with a soft sheen from the top, and an edge that catches the light.
-                    .background(Color(0xFF0B0D12).copy(alpha = UiSettings.glass.panel))
+                    .background(Color(0xFF0B0D12).copy(alpha = maxOf(UiSettings.glass.panel, 0.93f)))
                     .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.14f), Color.White.copy(alpha = 0.02f))))
                     .border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.45f), Color.White.copy(alpha = 0.10f))), panel)
                     .focusProperties { exit = { FocusRequester.Cancel } }

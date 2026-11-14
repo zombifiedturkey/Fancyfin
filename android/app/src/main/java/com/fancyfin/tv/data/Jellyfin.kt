@@ -317,6 +317,81 @@ class JellyfinClient(private val prefs: Prefs) {
         parseTmdb(JSONObject(body).optJSONArray("results") ?: return@withContext emptyList(), if (kind == "tv") "tv" else "movie")
     }
 
+
+    /** The YouTube key of the best trailer TMDB knows for a title, or null. */
+    suspend fun trailerKey(kind: String, tmdbId: Int): String? = withContext(Dispatchers.IO) {
+        val body = try { request(fancyfin, "/tmdb/$kind/$tmdbId/videos") } catch (e: ApiException) { return@withContext null }
+        val list = JSONObject(body).optJSONArray("results") ?: return@withContext null
+        var best: String? = null
+        var bestScore = -1
+        for (i in 0 until list.length()) {
+            val v = list.getJSONObject(i)
+            if (v.optString("site") != "YouTube") continue
+            val score = (if (v.optString("type") == "Trailer") 4 else if (v.optString("type") == "Teaser") 1 else 0) +
+                (if (v.optBoolean("official")) 2 else 0)
+            if (v.optString("type") != "Trailer" && v.optString("type") != "Teaser") continue
+            if (score > bestScore) { bestScore = score; best = v.optString("key") }
+        }
+        best
+    }
+
+    private val statusCache = HashMap<Int, String>()
+
+    /**
+     * Where a movie that isn't on your server stands: Streaming, Physical, In theatres or Coming soon,
+     * with the date of the next streaming or physical release when one is known. Dates are Australia's
+     * where TMDB has them, then the US's.
+     */
+    suspend fun releaseStatus(tmdbId: Int): String? = withContext(Dispatchers.IO) {
+        statusCache[tmdbId]?.let { return@withContext it }
+        val body = try { request(fancyfin, "/tmdb/movie/$tmdbId/release_dates") } catch (e: ApiException) { return@withContext null }
+        val countries = JSONObject(body).optJSONArray("results") ?: return@withContext null
+        // Earliest date for each release type, per country.
+        val byCountry = HashMap<String, HashMap<Int, String>>()
+        for (i in 0 until countries.length()) {
+            val c = countries.getJSONObject(i)
+            val map = byCountry.getOrPut(c.optString("iso_3166_1")) { HashMap() }
+            val dates = c.optJSONArray("release_dates") ?: continue
+            for (j in 0 until dates.length()) {
+                val d = dates.getJSONObject(j)
+                val type = d.optInt("type")
+                val date = d.optString("release_date").take(10)
+                if (date.length == 10 && (map[type] == null || date < map[type]!!)) map[type] = date
+            }
+        }
+        fun pick(type: Int): String? =
+            byCountry["AU"]?.get(type) ?: byCountry["US"]?.get(type)
+                ?: byCountry.values.mapNotNull { it[type] }.minOrNull()
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+        fun nice(date: String): String = try {
+            val parsed = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).parse(date)
+            java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.ENGLISH).format(parsed!!)
+        } catch (e: Exception) { date }
+
+        val digital = pick(4)
+        val physical = pick(5)
+        val theatrical = listOfNotNull(pick(3), pick(2)).minOrNull()
+        val streaming = digital != null && digital <= today
+        val onDisc = physical != null && physical <= today
+        val inCinemas = theatrical != null && theatrical <= today
+        val next = listOfNotNull(
+            digital?.takeIf { it > today }?.let { it to "Streaming" },
+            physical?.takeIf { it > today }?.let { it to "Physical" },
+        ).minByOrNull { it.first }
+
+        val label = when {
+            streaming && onDisc -> "Streaming · Physical"
+            streaming -> "Streaming"
+            onDisc -> "Physical"
+            inCinemas -> "In theatres" + (next?.let { " · ${it.second} ${nice(it.first)}" } ?: "")
+            next != null -> "Coming soon · ${next.second} ${nice(next.first)}"
+            theatrical != null -> "Coming soon · In theatres ${nice(theatrical)}"
+            else -> "Coming soon"
+        }
+        statusCache[tmdbId] = label
+        label
+    }
+
     /** TMDB uses a few different genre names for TV. */
     private val tvAlias = mapOf(
         "action" to "action & adventure", "adventure" to "action & adventure",
