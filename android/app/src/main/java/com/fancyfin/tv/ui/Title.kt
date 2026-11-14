@@ -153,6 +153,8 @@ fun TitleScreen(
     var arrState by remember { mutableStateOf<String?>(null) }
     var arrNote by remember { mutableStateOf<String?>(null) }
     var note by remember { mutableStateOf<String?>(null) }
+    // The episode you're on in the episodes row; its description replaces the show's while you're there.
+    var focusedEp by remember { mutableStateOf<Item?>(null) }
     var tmdbId by remember { mutableStateOf(ref.tmdbId) }
     val kind = ref.kind
 
@@ -206,6 +208,7 @@ fun TitleScreen(
 
     // What Play starts: the movie, or for a show the episode you're up to.
     val shown = item
+    val isShow = shown != null && shown.isSeries
     val target: Item? = when {
         shown == null -> null
         shown.isSeries -> episodes.firstOrNull { it.positionTicks > 0 && !it.played }
@@ -231,12 +234,13 @@ fun TitleScreen(
 
     val t = tmdb
     val title = shown?.seriesName ?: shown?.name ?: t?.title ?: ref.title
-    val overview = shown?.overview ?: t?.overview
-    val tagline = shown?.tagline ?: t?.tagline
+    val ep = focusedEp
+    val overview = ep?.overview?.takeIf { it.isNotBlank() } ?: shown?.overview ?: t?.overview
+    val tagline = if (ep != null) listOfNotNull(ep.episodeLabel, ep.name).joinToString(" · ") else shown?.tagline ?: t?.tagline
     val genres = shown?.genres?.takeIf { it.isNotEmpty() } ?: t?.genres ?: emptyList()
     val year = shown?.year ?: t?.year
     val rating = shown?.rating ?: t?.rating
-    val minutes = shown?.runtimeMinutes?.takeIf { it > 0 } ?: t?.runtimeMinutes ?: 0
+    val minutes = ep?.runtimeMinutes?.takeIf { it > 0 } ?: shown?.runtimeMinutes?.takeIf { it > 0 } ?: t?.runtimeMinutes ?: 0
     val hero = shown?.let { client.backdrop(it) } ?: (t?.backdrop ?: ref.backdrop)?.replace("/w1280/", "/original/")
     val posterUrl = shown?.let { client.poster(it, 342) } ?: t?.poster ?: ref.poster
     val trailers = t?.let { trailerKeys(it.videos) } ?: emptyList()
@@ -255,6 +259,8 @@ fun TitleScreen(
     LaunchedEffect(focusItem, topLimit) {
         listState.animateScrollToItem(if (focusItem <= topLimit) 0 else focusItem)
     }
+    // Leaving the episodes row (index 3 on a show) brings the show's own description back.
+    LaunchedEffect(focusItem) { if (focusItem != 3) focusedEp = null }
     val track: (Int) -> Modifier = { i -> Modifier.onFocusChanged { if (it.hasFocus) focusItem = i } }
     val best = versions.maxWithOrNull(compareBy<MediaVersion>({ resolutionHeight(it) }, { rangeRank(it) }, { it.sizeBytes }))
 
@@ -335,6 +341,7 @@ fun TitleScreen(
                             fun lead(): Modifier = if (!firstAssigned) { firstAssigned = true; Modifier.focusRequester(first) } else Modifier
                             if (target != null) {
                                 GlassButton(
+                                    compact = isShow,
                                     label = (if (resuming) "Resume" else "Play") + (target.episodeLabel?.let { " $it" } ?: ""),
                                     primary = true,
                                     modifier = lead(),
@@ -345,6 +352,7 @@ fun TitleScreen(
                             if (ref.server == null && addId != null) {
                                 val app = if (kind == "movie") "Radarr" else "Sonarr"
                                 GlassButton(
+                                    compact = isShow,
                                     label = when (arrState) {
                                         "in" -> "In $app ✓"
                                         "adding" -> "Adding…"
@@ -373,6 +381,7 @@ fun TitleScreen(
                             }
                             if (shown != null) {
                                 GlassButton(
+                                    compact = isShow,
                                     label = if (shown.played) "Watched ✓" else "Mark watched",
                                     modifier = lead(),
                                     onClick = {
@@ -386,6 +395,7 @@ fun TitleScreen(
                                     },
                                 )
                                 GlassButton(
+                                    compact = isShow,
                                     label = if (shown.favorite) "★ Favourite" else "☆ Favourite",
                                     onClick = {
                                         val next = !shown.favorite
@@ -436,18 +446,18 @@ fun TitleScreen(
                     val seasonsIndex = n++
                     item {
                         HRow(defaultSpec, spacing = 8.dp, vertical = 0.dp, modifier = track(seasonsIndex)) {
-                            items(seasons) { s -> GlassButton(s.name, onClick = { season = s }, primary = s.id == season?.id) }
+                            items(seasons) { s -> GlassButton(s.name, onClick = { season = s }, primary = s.id == season?.id, compact = true) }
                         }
                     }
                     val episodesIndex = n++
                     item {
                         HRow(defaultSpec, vertical = 8.dp, modifier = track(episodesIndex)) {
                             items(episodes) { ep ->
-                                Column(Modifier.width(160.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    ItemCard(ep, client, 160.dp, 90.dp, true, onClick = { onPlay(ep) })
+                                Column(Modifier.width(240.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    ItemCard(ep, client, 240.dp, 135.dp, true, onClick = { onPlay(ep) }, onFocused = { focusedEp = ep })
                                     Text(
                                         (ep.indexNumber?.let { "$it. " } ?: "") + ep.name,
-                                        color = Palette.Text, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                        color = Palette.Text, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
                                     )
                                 }
                             }

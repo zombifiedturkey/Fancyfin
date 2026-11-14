@@ -85,11 +85,12 @@ fun GlassButton(
     primary: Boolean = false,
     clear: Boolean = false,
     onFocused: () -> Unit = {},
+    compact: Boolean = false,
 ) {
     FocusBox(
         onClick = onClick,
         onFocused = onFocused,
-        modifier = modifier.height(36.dp),
+        modifier = modifier.height(if (compact) 26.dp else 36.dp),
         shape = RoundedCornerShape(UiSettings.corner.button),
         focusedScale = 1.06f,
     ) { focused ->
@@ -100,11 +101,11 @@ fun GlassButton(
             clear -> Color.White.copy(alpha = 0.06f)
             else -> Palette.GlassFill
         }
-        Box(Modifier.fillMaxHeight().background(fill).padding(horizontal = 18.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxHeight().background(fill).padding(horizontal = if (compact) 12.dp else 18.dp), contentAlignment = Alignment.Center) {
             Text(
                 label,
                 color = if (primary) Color.Black else Palette.Text,
-                fontSize = 13.sp,
+                fontSize = if (compact) 11.sp else 13.sp,
                 fontWeight = FontWeight.SemiBold,
             )
         }
