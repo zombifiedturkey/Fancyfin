@@ -81,12 +81,12 @@ fun FancyfinApp() {
 
             when (val route = stack.last()) {
                 is Route.Main -> when (route.tab) {
-                    Tab.Home, Tab.Movies, Tab.Shows -> BrowseScreen(route.tab, client, open, play, openGenre, openTitle, showTrailer, goTab, signOut)
+                    Tab.Home, Tab.Movies, Tab.Shows -> BrowseScreen(route.tab, client, open, play, openGenre, openTitle, goTab, signOut)
                     Tab.Search -> SearchScreen(client, open, goTab, signOut)
                     Tab.Settings -> SettingsScreen(goTab, signOut)
                     Tab.AllMovies, Tab.AllShows -> LibraryScreen(route.tab, client, open, goTab, signOut)
                 }
-                is Route.Genre -> GenreScreen(route.genre, route.types, client, open, play, openTitle, showTrailer, goTab, signOut)
+                is Route.Genre -> GenreScreen(route.genre, route.types, client, open, play, openTitle, goTab, signOut)
                 is Route.Title -> TitleScreen(route.ref, client, play, openTitle, showTrailer) { p -> stack.add(Route.Person(PersonRef(p.id, p.name, p.photo))) }
                 is Route.Person -> PersonScreen(route.ref, client, openTitle)
                 is Route.Play -> PlayerScreen(route.item, client, route.sourceId, back)

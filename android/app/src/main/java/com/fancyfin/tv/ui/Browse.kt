@@ -116,7 +116,7 @@ internal fun smallTmdb(url: String?): String? = url?.replace("/w1280/", "/w300/"
 
 /** Stops a list scrolling by itself when something gets focus, for lists that place their own contents. */
 @OptIn(ExperimentalFoundationApi::class)
-private val NoAutoScroll = object : BringIntoViewSpec {
+internal val NoAutoScroll = object : BringIntoViewSpec {
     override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = 0f
 }
 
@@ -171,33 +171,6 @@ private fun playEntry(
 
 private fun titleRef(e: HeroEntry) = TitleRef(e.kind, e.tmdbId, e.onServer, e.title, e.backdrop, e.poster)
 
-/** Find the trailer(s) for a tile and hand them to the in-app player. */
-private fun trailerEntry(
-    e: HeroEntry,
-    scope: CoroutineScope,
-    client: JellyfinClient,
-    onTrailer: (List<String>) -> Unit,
-    say: (String) -> Unit,
-) {
-    scope.launch {
-        try {
-            val server = e.onServer
-            var id = e.tmdbId
-            var kind = e.kind
-            if (id == null && server != null) {
-                val seriesId = server.seriesId
-                val series = if (server.isEpisode && seriesId != null) client.item(seriesId) else server
-                id = series.tmdbId?.toIntOrNull()
-                kind = if (series.isMovie) "movie" else "tv"
-            }
-            val keys = if (id != null) com.fancyfin.tv.data.trailerKeys(client.videos(kind, id)) else emptyList()
-            if (keys.isEmpty()) say("No trailer found for “${e.title}”.") else onTrailer(keys)
-        } catch (x: Exception) {
-            say("Couldn't load the trailer.")
-        }
-    }
-}
-
 /** "Close Fancyfin?" in glass. Back or Stay dismisses it. */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -247,7 +220,6 @@ fun FeatureList(
     onDetails: (HeroEntry) -> Unit,
     onMore: (String) -> Unit,
     onOpenItem: (Item) -> Unit,
-    onTrailer: (HeroEntry) -> Unit,
     onExit: (() -> Unit)?,
 ) {
     val scope = rememberCoroutineScope()
@@ -306,7 +278,6 @@ fun FeatureList(
                         },
                         onClick = { e -> if (e.isMore) onMore(section.genre ?: "") else onPlay(e) },
                         onLongClick = { e -> if (!e.isMore) onDetails(e) },
-                        onTrailer = onTrailer,
                     )
                 }
             }
@@ -357,7 +328,6 @@ fun BrowseScreen(
     onPlay: (Item) -> Unit,
     onGenre: (String, String) -> Unit,
     onTitle: (TitleRef) -> Unit,
-    onTrailer: (List<String>) -> Unit,
     onTab: (Tab) -> Unit,
     onSignOut: () -> Unit,
 ) {
@@ -446,7 +416,6 @@ fun BrowseScreen(
                         onDetails = { e -> playEntry(e, scope, client, onPlay, onOpen) { message = it } },
                         onMore = { genre -> onGenre(genre, types) },
                         onOpenItem = onOpen,
-                        onTrailer = { e -> trailerEntry(e, scope, client, onTrailer) { message = it } },
                         onExit = { askExit = true },
                     )
                 }
@@ -476,7 +445,6 @@ fun GenreScreen(
     onOpen: (Item) -> Unit,
     onPlay: (Item) -> Unit,
     onTitle: (TitleRef) -> Unit,
-    onTrailer: (List<String>) -> Unit,
     onTab: (Tab) -> Unit,
     onSignOut: () -> Unit,
 ) {
@@ -552,7 +520,6 @@ fun GenreScreen(
                         onDetails = { e -> playEntry(e, scope, client, onPlay, onOpen) { message = it } },
                         onMore = {},
                         onOpenItem = onOpen,
-                        onTrailer = { e -> trailerEntry(e, scope, client, onTrailer) { message = it } },
                         onExit = null,
                     )
                 }
@@ -586,7 +553,6 @@ private fun HeroRow(
     onSelect: (Int) -> Unit,
     onClick: (HeroEntry) -> Unit,
     onLongClick: (HeroEntry) -> Unit,
-    onTrailer: (HeroEntry) -> Unit,
 ) {
     LaunchedEffect(expandedIndex) {
         if (expandedIndex != null) listState.animateScrollToItem((expandedIndex - 1).coerceAtLeast(0))
@@ -614,7 +580,6 @@ private fun HeroRow(
                     onFocused = { onSelect(index) },
                     onClick = { onClick(entry) },
                     onLongClick = { onLongClick(entry) },
-                    onTrailer = { onTrailer(entry) },
                 )
             }
         }
@@ -631,11 +596,8 @@ private fun HeroTile(
     onFocused: () -> Unit,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
-    onTrailer: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
-    // Right on the Play button moves to Trailer; Right again moves on to the next tile.
-    var trailerSelected by remember { mutableStateOf(false) }
     val narrow = if (mini) 100.dp else 118.dp
     val wide = if (mini) 312.dp else 520.dp
     val tall = if (mini) 150.dp else 250.dp
@@ -652,18 +614,12 @@ private fun HeroTile(
                 else if (UiSettings.posterBorder) Modifier.border(1.dp, Palette.GlassEdge, shape)
                 else Modifier,
             )
-            .onPreviewKeyEvent { event ->
-                if (!expanded || event.type != KeyEventType.KeyDown) false
-                else if (event.key == Key.DirectionRight && !trailerSelected) { trailerSelected = true; true }
-                else if (event.key == Key.DirectionLeft && trailerSelected) { trailerSelected = false; true }
-                else false
-            }
             .focusRequester(focusRequester)
             .onFocusChanged {
                 focused = it.isFocused
-                if (it.isFocused) onFocused() else trailerSelected = false
+                if (it.isFocused) onFocused()
             }
-            .combinedClickable(onClick = { if (expanded && trailerSelected) onTrailer() else onClick() }, onLongClick = onLongClick),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
         Box(Modifier.fillMaxSize().background(Palette.GlassFill))
 
@@ -715,28 +671,16 @@ private fun HeroTile(
                 val round = RoundedCornerShape(UiSettings.corner.button.coerceAtMost(if (mini) 11.dp else 15.dp))
                 val h = if (mini) 22.dp else 30.dp
                 val pad = if (mini) 10.dp else 16.dp
-                Row(Modifier.padding(top = if (mini) 6.dp else 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(
-                        Modifier.height(h)
-                            .then(if (focused && !trailerSelected) Modifier.border(2.dp, Palette.Text, round) else Modifier)
-                            .background(if (here) Palette.Accent else Palette.GlassFillStrong, round)
-                            .padding(horizontal = pad),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            if (here) "▶  ${entry.action}" else "Not on your server",
-                            color = if (here) Color.Black else Palette.Text, fontSize = small, fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                    Box(
-                        Modifier.height(h)
-                            .then(if (focused && trailerSelected) Modifier.border(2.dp, Palette.Text, round) else Modifier)
-                            .background(Palette.GlassFillStrong, round)
-                            .padding(horizontal = pad),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text("Trailer", color = Palette.Text, fontSize = small, fontWeight = FontWeight.SemiBold)
-                    }
+                Box(
+                    Modifier.padding(top = if (mini) 6.dp else 10.dp).height(h)
+                        .background(if (here) Palette.Accent else Palette.GlassFillStrong, round)
+                        .padding(horizontal = pad),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        if (here) "▶  ${entry.action}" else "Not on your server",
+                        color = if (here) Color.Black else Palette.Text, fontSize = small, fontWeight = FontWeight.SemiBold,
+                    )
                 }
             }
         }

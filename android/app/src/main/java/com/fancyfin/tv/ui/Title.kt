@@ -13,7 +13,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -110,6 +117,7 @@ private fun PosterTile(
  * the rest of its franchise, more like it, and trailers and extras. Works for titles that aren't on your
  * server too, using TMDB.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TitleScreen(
     ref: TitleRef,
@@ -217,66 +225,90 @@ fun TitleScreen(
     val backdrop = shown?.let { client.backdrop(it) } ?: t?.backdrop ?: ref.backdrop
     val trailers = t?.let { trailerKeys(it.videos) } ?: emptyList()
 
+    // Pages open at the top, with the cast row at the bottom of the screen. Going down from the buttons to
+    // the cast doesn't scroll; going further down scrolls the next row to the top; coming back up to the
+    // cast (or above) goes back to the very top.
+    val defaultSpec = LocalBringIntoViewSpec.current
+    val listState = rememberLazyListState()
+    var focusItem by remember { mutableStateOf(0) }
+    val hasSeasons = shown != null && shown.isSeries && seasons.isNotEmpty()
+    val hasCast = t != null && t.cast.isNotEmpty()
+    val topLimit = 1 + (if (hasSeasons) 2 else 0) + (if (hasCast) 1 else 0)
+    LaunchedEffect(focusItem, topLimit) {
+        listState.animateScrollToItem(if (focusItem <= topLimit) 0 else focusItem)
+    }
+    val track: (Int) -> Modifier = { i -> Modifier.onFocusChanged { if (it.hasFocus) focusItem = i } }
+    val best = versions.maxWithOrNull(compareBy<MediaVersion>({ resolutionHeight(it) }, { rangeRank(it) }, { it.sizeBytes }))
+
     Box(Modifier.fillMaxSize()) {
         Backdrop(backdrop)
 
-        LazyColumn(
-            Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = 28.dp, bottom = 60.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-        ) {
-            item {
-                Column(Modifier.padding(start = 24.dp).width(520.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    val logo = shown?.let { client.logo(it) }
-                    if (logo != null) {
-                        AsyncImage(
-                            model = logo, contentDescription = title, contentScale = ContentScale.Fit,
-                            alignment = Alignment.CenterStart, modifier = Modifier.height(70.dp).width(300.dp),
-                        )
-                    } else {
-                        Text(title, color = Palette.Text, fontSize = 30.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    }
-                    val meta = listOfNotNull(
-                        year?.toString(), shown?.officialRating, runtimeText(minutes), rating?.let { "★ " + "%.1f".format(it) },
-                    )
-                    if (meta.isNotEmpty()) Text(meta.joinToString("   ·   "), color = Palette.TextMuted, fontSize = 12.sp)
-                    if (genres.isNotEmpty()) Text(genres.take(4).joinToString(", "), color = Palette.TextMuted, fontSize = 12.sp)
-                    tagline?.let { Text(it, color = Palette.Accent, fontSize = 12.sp) }
-                    overview?.let { Text(it, color = Palette.TextMuted, fontSize = 13.sp, maxLines = 6, overflow = TextOverflow.Ellipsis) }
-                }
-            }
+        CompositionLocalProvider(LocalBringIntoViewSpec provides NoAutoScroll) {
+            LazyColumn(
+                Modifier.fillMaxSize(),
+                state = listState,
+                contentPadding = PaddingValues(top = 20.dp, bottom = 300.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                var n = 0
 
-            // Quality for what's on the server; release status for what isn't.
-            item {
-                Column(Modifier.padding(start = 24.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    if (ref.server != null) {
-                        if (versions.isNotEmpty()) {
-                            Text("QUALITY", color = Palette.TextMuted, fontSize = 10.sp, letterSpacing = 1.2.sp)
-                            versions.sortedByDescending { it.sizeBytes }.take(3).forEach { v ->
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(v.resolution, color = Palette.Text, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                    Text(
-                                        v.range, fontSize = 12.sp,
-                                        color = if (v.range != "SDR") Palette.Accent else Palette.TextMuted,
-                                        fontWeight = if (v.range != "SDR") FontWeight.SemiBold else FontWeight.Normal,
-                                    )
-                                    Text(
-                                        listOf(v.audio, v.codec, v.container, sizeText(v.sizeBytes)).filter { it.isNotEmpty() }.joinToString("   ·   "),
-                                        color = Palette.Text, fontSize = 12.sp,
-                                    )
+                // What it is on the left; how it will look and sound (or when it's out) on the right.
+                val headerIndex = n++
+                item {
+                    Row(Modifier.padding(horizontal = 24.dp).then(track(headerIndex)), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+                        Column(Modifier.width(500.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            val logo = shown?.let { client.logo(it) }
+                            if (logo != null) {
+                                AsyncImage(
+                                    model = logo, contentDescription = title, contentScale = ContentScale.Fit,
+                                    alignment = Alignment.CenterStart, modifier = Modifier.height(64.dp).width(300.dp),
+                                )
+                            } else {
+                                Text(title, color = Palette.Text, fontSize = 30.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            }
+                            val meta = listOfNotNull(
+                                year?.toString(), shown?.officialRating, runtimeText(minutes), rating?.let { "★ " + "%.1f".format(it) },
+                            )
+                            if (meta.isNotEmpty()) Text(meta.joinToString("   ·   "), color = Palette.TextMuted, fontSize = 12.sp)
+                            if (genres.isNotEmpty()) Text(genres.take(4).joinToString(", "), color = Palette.TextMuted, fontSize = 12.sp)
+                            tagline?.let { Text(it, color = Palette.Accent, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                            overview?.let { Text(it, color = Palette.TextMuted, fontSize = 13.sp, maxLines = 4, overflow = TextOverflow.Ellipsis) }
+                        }
+                        Column(Modifier.width(300.dp).padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            if (ref.server != null) {
+                                if (best != null) {
+                                    Text("QUALITY", color = Palette.TextMuted, fontSize = 10.sp, letterSpacing = 1.2.sp)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Text(best.resolution, color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                                        Text(
+                                            best.range, fontSize = 13.sp,
+                                            color = if (best.range != "SDR") Palette.Accent else Palette.TextMuted,
+                                            fontWeight = if (best.range != "SDR") FontWeight.SemiBold else FontWeight.Normal,
+                                        )
+                                    }
+                                    val sound = listOf(best.audio, best.codec).filter { it.isNotEmpty() }.joinToString("   ·   ")
+                                    if (sound.isNotEmpty()) Text(sound, color = Palette.Text, fontSize = 12.sp)
+                                    val file = listOf(best.container, sizeText(best.sizeBytes)).filter { it.isNotEmpty() }.joinToString("   ·   ")
+                                    if (file.isNotEmpty()) Text(file, color = Palette.TextMuted, fontSize = 12.sp)
+                                    if (versions.size > 1) {
+                                        Text(
+                                            "⧉  ${versions.size} copies · best shown, you choose when you play",
+                                            color = Palette.Accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.padding(top = 4.dp),
+                                        )
+                                    }
                                 }
+                            } else {
+                                Text("NOT ON YOUR SERVER", color = Palette.TextMuted, fontSize = 10.sp, letterSpacing = 1.2.sp)
+                                status?.let { Text(it, color = Palette.Accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
                             }
                         }
-                    } else {
-                        Text("NOT ON YOUR SERVER", color = Palette.TextMuted, fontSize = 10.sp, letterSpacing = 1.2.sp)
-                        status?.let { Text(it, color = Palette.Accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
                     }
                 }
-            }
 
-            item {
-                Column(Modifier.padding(start = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                val buttonsIndex = n++
+                item {
+                    Row(Modifier.padding(start = 24.dp).then(track(buttonsIndex)), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         var firstAssigned = false
                         fun lead(): Modifier = if (!firstAssigned) { firstAssigned = true; Modifier.focusRequester(first) } else Modifier
                         if (target != null) {
@@ -322,132 +354,137 @@ fun TitleScreen(
                             )
                         }
                     }
-                    note?.let { Text(it, color = Palette.TextMuted, fontSize = 11.sp) }
                 }
-            }
 
-            if (shown != null && shown.isSeries && seasons.isNotEmpty()) {
-                item {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 24.dp)) {
-                        items(seasons) { s -> GlassButton(s.name, onClick = { season = s }, primary = s.id == season?.id) }
-                    }
-                }
-                item {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp)) {
-                        items(episodes) { ep ->
-                            Column(Modifier.width(160.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                ItemCard(ep, client, 160.dp, 90.dp, true, onClick = { onPlay(ep) })
-                                Text(
-                                    (ep.indexNumber?.let { "$it. " } ?: "") + ep.name,
-                                    color = Palette.Text, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                )
-                            }
+                if (hasSeasons) {
+                    val seasonsIndex = n++
+                    item {
+                        HRow(defaultSpec, spacing = 8.dp, vertical = 0.dp, modifier = track(seasonsIndex)) {
+                            items(seasons) { s -> GlassButton(s.name, onClick = { season = s }, primary = s.id == season?.id) }
                         }
                     }
-                }
-            }
-
-            if (t != null && t.cast.isNotEmpty()) {
-                item {
-                    Column {
-                        SectionTitle("Cast")
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(horizontal = 24.dp, vertical = 4.dp)) {
-                            items(t.cast) { p ->
-                                FocusBox(
-                                    onClick = { onPerson(p) },
-                                    modifier = Modifier.width(108.dp).height(156.dp),
-                                    edge = UiSettings.posterBorder,
-                                ) { _ ->
-                                    Column(
-                                        Modifier.fillMaxSize()
-                                            .background(Palette.GlassFill)
-                                            .background(Palette.Accent.copy(alpha = 0.10f))
-                                            .padding(horizontal = 6.dp, vertical = 10.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                                    ) {
-                                        Box(Modifier.size(62.dp).clip(CircleShape).background(Palette.GlassFillStrong)) {
-                                            if (p.photo != null) AsyncImage(model = p.photo, contentDescription = p.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                                        }
-                                        Text(
-                                            p.name, color = Palette.Text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-                                            textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                                        )
-                                        p.role?.let {
-                                            Text(it, color = Palette.TextMuted, fontSize = 10.sp, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (franchise.size > 1) {
-                item {
-                    val position = franchise.indexOfFirst { it.tmdbId == tmdbId }
-                    Column {
-                        SectionTitle(
-                            (t?.collectionName ?: "Franchise") + if (position >= 0) "   ·   This is part ${position + 1} of ${franchise.size}" else "",
-                        )
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 24.dp, vertical = 4.dp)) {
-                            items(franchise) { part ->
-                                val here = index["movie:${part.tmdbId}"]
-                                PosterTile(
-                                    url = part.poster, title = part.title + (part.year?.let { " ($it)" } ?: ""),
-                                    onServer = here != null, current = part.tmdbId == tmdbId,
-                                    onClick = {
-                                        if (part.tmdbId != tmdbId) onOpen(TitleRef("movie", part.tmdbId, here, part.title, part.backdrop, part.poster))
-                                    },
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            val moreTmdb = t?.more ?: emptyList()
-            if (moreTmdb.isNotEmpty() || serverSimilar.isNotEmpty()) {
-                item {
-                    Column {
-                        SectionTitle("More like this")
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 24.dp, vertical = 4.dp)) {
-                            if (moreTmdb.isNotEmpty()) {
-                                items(moreTmdb) { d ->
-                                    val here = index["${d.kind}:${d.tmdbId}"]
-                                    PosterTile(
-                                        url = d.poster, title = d.title, onServer = here != null, current = false,
-                                        onClick = { onOpen(TitleRef(d.kind, d.tmdbId, here, d.title, d.backdrop, d.poster)) },
+                    val episodesIndex = n++
+                    item {
+                        HRow(defaultSpec, vertical = 8.dp, modifier = track(episodesIndex)) {
+                            items(episodes) { ep ->
+                                Column(Modifier.width(160.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    ItemCard(ep, client, 160.dp, 90.dp, true, onClick = { onPlay(ep) })
+                                    Text(
+                                        (ep.indexNumber?.let { "$it. " } ?: "") + ep.name,
+                                        color = Palette.Text, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                     )
                                 }
-                            } else {
-                                items(serverSimilar) { s -> ItemCard(s, client, 100.dp, 150.dp, false, onClick = { onOpen(TitleRef.of(s)) }) }
                             }
                         }
                     }
                 }
-            }
 
-            val extras = t?.videos ?: emptyList()
-            if (extras.isNotEmpty()) {
-                item {
-                    Column {
-                        SectionTitle("Trailers and extras")
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 24.dp, vertical = 4.dp)) {
-                            items(extras) { v ->
-                                Column(Modifier.width(176.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    FocusBox(onClick = { onTrailer(listOf(v.key)) }, modifier = Modifier.width(176.dp).height(99.dp), edge = UiSettings.posterBorder) { _ ->
-                                        Box(Modifier.fillMaxSize().background(Palette.GlassFill)) {
-                                            AsyncImage(
-                                                model = "https://i.ytimg.com/vi/${v.key}/mqdefault.jpg", contentDescription = v.name,
-                                                contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
+                if (t != null && hasCast) {
+                    val castIndex = n++
+                    item {
+                        Column(track(castIndex)) {
+                            SectionTitle("Cast")
+                            HRow(defaultSpec, spacing = 14.dp) {
+                                items(t.cast) { p ->
+                                    FocusBox(
+                                        onClick = { onPerson(p) },
+                                        modifier = Modifier.width(108.dp).height(156.dp),
+                                        edge = UiSettings.posterBorder,
+                                    ) { _ ->
+                                        Column(
+                                            Modifier.fillMaxSize()
+                                                .background(Palette.GlassFill)
+                                                .background(Palette.Accent.copy(alpha = 0.10f))
+                                                .padding(horizontal = 6.dp, vertical = 10.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        ) {
+                                            Box(Modifier.size(62.dp).clip(CircleShape).background(Palette.GlassFillStrong)) {
+                                                if (p.photo != null) AsyncImage(model = p.photo, contentDescription = p.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                                            }
+                                            Text(
+                                                p.name, color = Palette.Text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                                                textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis,
                                             )
-                                            Text("▶", color = Palette.Text, fontSize = 22.sp, modifier = Modifier.align(Alignment.Center))
+                                            p.role?.let {
+                                                Text(it, color = Palette.TextMuted, fontSize = 10.sp, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                            }
                                         }
                                     }
-                                    Text(v.type.uppercase(), color = Palette.Accent, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                    Text(v.name, color = Palette.Text, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (franchise.size > 1) {
+                    val franchiseIndex = n++
+                    item {
+                        val position = franchise.indexOfFirst { it.tmdbId == tmdbId }
+                        Column(track(franchiseIndex)) {
+                            SectionTitle(
+                                (t?.collectionName ?: "Franchise") + if (position >= 0) "   ·   This is part ${position + 1} of ${franchise.size}" else "",
+                            )
+                            HRow(defaultSpec) {
+                                items(franchise) { part ->
+                                    val here = index["movie:${part.tmdbId}"]
+                                    PosterTile(
+                                        url = part.poster, title = part.title + (part.year?.let { " ($it)" } ?: ""),
+                                        onServer = here != null, current = part.tmdbId == tmdbId,
+                                        onClick = {
+                                            if (part.tmdbId != tmdbId) onOpen(TitleRef("movie", part.tmdbId, here, part.title, part.backdrop, part.poster))
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                val moreTmdb = t?.more ?: emptyList()
+                if (moreTmdb.isNotEmpty() || serverSimilar.isNotEmpty()) {
+                    val moreIndex = n++
+                    item {
+                        Column(track(moreIndex)) {
+                            SectionTitle("More like this")
+                            HRow(defaultSpec) {
+                                if (moreTmdb.isNotEmpty()) {
+                                    items(moreTmdb) { d ->
+                                        val here = index["${d.kind}:${d.tmdbId}"]
+                                        PosterTile(
+                                            url = d.poster, title = d.title, onServer = here != null, current = false,
+                                            onClick = { onOpen(TitleRef(d.kind, d.tmdbId, here, d.title, d.backdrop, d.poster)) },
+                                        )
+                                    }
+                                } else {
+                                    items(serverSimilar) { sim -> ItemCard(sim, client, 100.dp, 150.dp, false, onClick = { onOpen(TitleRef.of(sim)) }) }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                val extras = t?.videos ?: emptyList()
+                if (extras.isNotEmpty()) {
+                    val extrasIndex = n++
+                    item {
+                        Column(track(extrasIndex)) {
+                            SectionTitle("Trailers and extras")
+                            HRow(defaultSpec) {
+                                items(extras) { v ->
+                                    Column(Modifier.width(176.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        FocusBox(onClick = { onTrailer(listOf(v.key)) }, modifier = Modifier.width(176.dp).height(99.dp), edge = UiSettings.posterBorder) { _ ->
+                                            Box(Modifier.fillMaxSize().background(Palette.GlassFill)) {
+                                                AsyncImage(
+                                                    model = "https://i.ytimg.com/vi/${v.key}/mqdefault.jpg", contentDescription = v.name,
+                                                    contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
+                                                )
+                                                Text("▶", color = Palette.Text, fontSize = 22.sp, modifier = Modifier.align(Alignment.Center))
+                                            }
+                                        }
+                                        Text(v.type.uppercase(), color = Palette.Accent, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                        Text(v.name, color = Palette.Text, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                    }
                                 }
                             }
                         }
@@ -455,6 +492,34 @@ fun TitleScreen(
                 }
             }
         }
+    }
+}
+
+private fun resolutionHeight(v: MediaVersion): Int = Regex("\\d+").find(v.resolution)?.value?.toIntOrNull() ?: 0
+
+private fun rangeRank(v: MediaVersion): Int = when {
+    v.range.contains("Dolby Vision") -> 4
+    v.range.contains("HDR10") -> 3
+    v.range.contains("HDR") || v.range.contains("HLG") -> 2
+    else -> 0
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun HRow(
+    spec: BringIntoViewSpec,
+    spacing: Dp = 12.dp,
+    vertical: Dp = 4.dp,
+    modifier: Modifier = Modifier,
+    content: LazyListScope.() -> Unit,
+) {
+    CompositionLocalProvider(LocalBringIntoViewSpec provides spec) {
+        LazyRow(
+            modifier = modifier,
+            horizontalArrangement = Arrangement.spacedBy(spacing),
+            contentPadding = PaddingValues(horizontal = 24.dp, vertical = vertical),
+            content = content,
+        )
     }
 }
 
