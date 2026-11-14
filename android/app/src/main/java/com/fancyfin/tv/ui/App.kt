@@ -22,7 +22,7 @@ import kotlinx.coroutines.launch
 /** Where you are in the app. Back goes to the one before. */
 private sealed class Route {
     data class Main(val tab: Tab) : Route()
-    data class Detail(val item: Item) : Route()
+    data class Title(val ref: TitleRef) : Route()
     data class Genre(val genre: String, val types: String) : Route()
     data class Play(val item: Item, val sourceId: String?) : Route()
 }
@@ -37,6 +37,7 @@ fun FancyfinApp() {
     var signedIn by remember { mutableStateOf(client.isSignedIn) }
     val stack = remember { mutableStateListOf<Route>(Route.Main(Tab.Home)) }
     val scope = rememberCoroutineScope()
+    var trailer by remember { mutableStateOf<List<String>?>(null) }
     var choice by remember { mutableStateOf<Pair<Item, List<MediaVersion>>?>(null) }
 
     TvScale {
@@ -60,7 +61,8 @@ fun FancyfinApp() {
                 stack.clear()
                 stack.add(Route.Main(tab))
             }
-            val open: (Item) -> Unit = { item -> stack.add(Route.Detail(item)) }
+            val open: (Item) -> Unit = { item -> stack.add(Route.Title(TitleRef.of(item))) }
+            val openTitle: (TitleRef) -> Unit = { ref -> stack.add(Route.Title(ref)) }
             val openGenre: (String, String) -> Unit = { genre, types -> stack.add(Route.Genre(genre, types)) }
             // Playing a title that has more than one version asks which one first.
             val play: (Item) -> Unit = { item ->
@@ -73,19 +75,22 @@ fun FancyfinApp() {
                     }
                 }
             }
+            val showTrailer: (List<String>) -> Unit = { keys -> trailer = keys }
             val back: () -> Unit = { if (stack.size > 1) stack.removeAt(stack.lastIndex) }
 
             when (val route = stack.last()) {
                 is Route.Main -> when (route.tab) {
-                    Tab.Home, Tab.Movies, Tab.Shows -> BrowseScreen(route.tab, client, open, play, openGenre, goTab, signOut)
+                    Tab.Home, Tab.Movies, Tab.Shows -> BrowseScreen(route.tab, client, open, play, openGenre, openTitle, showTrailer, goTab, signOut)
                     Tab.Search -> SearchScreen(client, open, goTab, signOut)
                     Tab.Settings -> SettingsScreen(goTab, signOut)
                     Tab.AllMovies, Tab.AllShows -> LibraryScreen(route.tab, client, open, goTab, signOut)
                 }
-                is Route.Genre -> GenreScreen(route.genre, route.types, client, open, play, goTab, signOut)
-                is Route.Detail -> DetailScreen(route.item, client, play, open)
+                is Route.Genre -> GenreScreen(route.genre, route.types, client, open, play, openTitle, showTrailer, goTab, signOut)
+                is Route.Title -> TitleScreen(route.ref, client, play, openTitle, showTrailer)
                 is Route.Play -> PlayerScreen(route.item, client, route.sourceId, back)
             }
+
+            trailer?.let { keys -> TrailerPlayer(keys) { trailer = null } }
 
             choice?.let { (item, versions) ->
                 VersionChooser(

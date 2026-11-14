@@ -112,7 +112,7 @@ private val POPULAR_GENRES = listOf(
     "Adventure", "Crime", "Fantasy", "Romance", "Family", "Mystery", "Documentary",
 )
 
-private fun smallTmdb(url: String?): String? = url?.replace("/w1280/", "/w300/")?.replace("/w342/", "/w185/")
+internal fun smallTmdb(url: String?): String? = url?.replace("/w1280/", "/w300/")?.replace("/w342/", "/w185/")
 
 /** Stops a list scrolling by itself when something gets focus, for lists that place their own contents. */
 @OptIn(ExperimentalFoundationApi::class)
@@ -169,12 +169,14 @@ private fun playEntry(
     }
 }
 
-/** Find the trailer and open it full screen in the YouTube app (or the browser if there isn't one). */
+private fun titleRef(e: HeroEntry) = TitleRef(e.kind, e.tmdbId, e.onServer, e.title, e.backdrop, e.poster)
+
+/** Find the trailer(s) for a tile and hand them to the in-app player. */
 private fun trailerEntry(
     e: HeroEntry,
     scope: CoroutineScope,
     client: JellyfinClient,
-    context: Context,
+    onTrailer: (List<String>) -> Unit,
     say: (String) -> Unit,
 ) {
     scope.launch {
@@ -183,25 +185,15 @@ private fun trailerEntry(
             var id = e.tmdbId
             var kind = e.kind
             if (id == null && server != null) {
-                val series = if (server.isEpisode && server.seriesId != null) client.item(server.seriesId) else server
+                val seriesId = server.seriesId
+                val series = if (server.isEpisode && seriesId != null) client.item(seriesId) else server
                 id = series.tmdbId?.toIntOrNull()
                 kind = if (series.isMovie) "movie" else "tv"
             }
-            val key = if (id != null) client.trailerKey(kind, id) else null
-            if (key == null) {
-                say("No trailer found for “${e.title}”.")
-                return@launch
-            }
-            val app = Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:$key")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            try {
-                context.startActivity(app)
-            } catch (x: Exception) {
-                context.startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$key")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                )
-            }
+            val keys = if (id != null) com.fancyfin.tv.data.trailerKeys(client.videos(kind, id)) else emptyList()
+            if (keys.isEmpty()) say("No trailer found for “${e.title}”.") else onTrailer(keys)
         } catch (x: Exception) {
-            say("Couldn't open the trailer.")
+            say("Couldn't load the trailer.")
         }
     }
 }
@@ -364,6 +356,8 @@ fun BrowseScreen(
     onOpen: (Item) -> Unit,
     onPlay: (Item) -> Unit,
     onGenre: (String, String) -> Unit,
+    onTitle: (TitleRef) -> Unit,
+    onTrailer: (List<String>) -> Unit,
     onTab: (Tab) -> Unit,
     onSignOut: () -> Unit,
 ) {
@@ -448,11 +442,11 @@ fun BrowseScreen(
                         sections = sections,
                         grid = null,
                         onWallpaper = { wallpaper = it },
-                        onPlay = { e -> playEntry(e, scope, client, onPlay, onOpen) { message = it } },
-                        onDetails = { e -> e.onServer?.let(onOpen) },
+                        onPlay = { e -> onTitle(titleRef(e)) },
+                        onDetails = { e -> playEntry(e, scope, client, onPlay, onOpen) { message = it } },
                         onMore = { genre -> onGenre(genre, types) },
                         onOpenItem = onOpen,
-                        onTrailer = { e -> trailerEntry(e, scope, client, context) { message = it } },
+                        onTrailer = { e -> trailerEntry(e, scope, client, onTrailer) { message = it } },
                         onExit = { askExit = true },
                     )
                 }
@@ -481,6 +475,8 @@ fun GenreScreen(
     client: JellyfinClient,
     onOpen: (Item) -> Unit,
     onPlay: (Item) -> Unit,
+    onTitle: (TitleRef) -> Unit,
+    onTrailer: (List<String>) -> Unit,
     onTab: (Tab) -> Unit,
     onSignOut: () -> Unit,
 ) {
@@ -552,11 +548,11 @@ fun GenreScreen(
                         sections = sections,
                         grid = GridSpec(allItems, sorts.map { it.first }, sortIndex) { sortIndex = it },
                         onWallpaper = { wallpaper = it },
-                        onPlay = { e -> playEntry(e, scope, client, onPlay, onOpen) { message = it } },
-                        onDetails = { e -> e.onServer?.let(onOpen) },
+                        onPlay = { e -> onTitle(titleRef(e)) },
+                        onDetails = { e -> playEntry(e, scope, client, onPlay, onOpen) { message = it } },
                         onMore = {},
                         onOpenItem = onOpen,
-                        onTrailer = { e -> trailerEntry(e, scope, client, context) { message = it } },
+                        onTrailer = { e -> trailerEntry(e, scope, client, onTrailer) { message = it } },
                         onExit = null,
                     )
                 }

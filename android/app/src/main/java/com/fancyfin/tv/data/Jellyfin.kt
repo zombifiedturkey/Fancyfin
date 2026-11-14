@@ -18,6 +18,36 @@ import java.net.URL
 import java.net.URLEncoder
 
 /** A popular title from TMDB, which may or may not be on your server. */
+/** A trailer, teaser, clip or behind-the-scenes video on YouTube. */
+data class Video(val key: String, val name: String, val type: String, val official: Boolean)
+
+/** Trailers first (official before the rest), then teasers; the keys to try in order. */
+fun trailerKeys(videos: List<Video>): List<String> =
+    videos.filter { it.type == "Trailer" || it.type == "Teaser" }
+        .sortedByDescending { (if (it.type == "Trailer") 2 else 0) + (if (it.official) 1 else 0) }
+        .map { it.key }
+
+class Person(val name: String, val role: String?, val photo: String?)
+
+class TmdbTitle(
+    val kind: String,
+    val id: Int,
+    val title: String,
+    val tagline: String?,
+    val overview: String?,
+    val year: Int?,
+    val rating: Double?,
+    val runtimeMinutes: Int,
+    val genres: List<String>,
+    val backdrop: String?,
+    val poster: String?,
+    val cast: List<Person>,
+    val videos: List<Video>,
+    val more: List<Discover>,
+    val collectionId: Int?,
+    val collectionName: String?,
+)
+
 data class Discover(
     val tmdbId: Int,
     val kind: String,
@@ -318,21 +348,79 @@ class JellyfinClient(private val prefs: Prefs) {
     }
 
 
-    /** The YouTube key of the best trailer TMDB knows for a title, or null. */
-    suspend fun trailerKey(kind: String, tmdbId: Int): String? = withContext(Dispatchers.IO) {
-        val body = try { request(fancyfin, "/tmdb/$kind/$tmdbId/videos") } catch (e: ApiException) { return@withContext null }
-        val list = JSONObject(body).optJSONArray("results") ?: return@withContext null
-        var best: String? = null
-        var bestScore = -1
+    /** A video from TMDB (always YouTube here): a trailer, teaser, clip, featurette or behind the scenes. */
+    suspend fun videos(kind: String, tmdbId: Int): List<Video> = withContext(Dispatchers.IO) {
+        val body = try { request(fancyfin, "/tmdb/$kind/$tmdbId/videos") } catch (e: ApiException) { return@withContext emptyList() }
+        parseVideos(JSONObject(body).optJSONArray("results"))
+    }
+
+    private fun parseVideos(list: JSONArray?): List<Video> {
+        val out = ArrayList<Video>()
+        if (list == null) return out
         for (i in 0 until list.length()) {
             val v = list.getJSONObject(i)
-            if (v.optString("site") != "YouTube") continue
-            val score = (if (v.optString("type") == "Trailer") 4 else if (v.optString("type") == "Teaser") 1 else 0) +
-                (if (v.optBoolean("official")) 2 else 0)
-            if (v.optString("type") != "Trailer" && v.optString("type") != "Teaser") continue
-            if (score > bestScore) { bestScore = score; best = v.optString("key") }
+            if (v.optString("site") != "YouTube" || v.optString("key").isEmpty()) continue
+            out.add(Video(v.getString("key"), v.optString("name"), v.optString("type"), v.optBoolean("official")))
         }
-        best
+        return out
+    }
+
+    /** One title in full from TMDB: cast, videos and what's like it. Null when TMDB isn't set up. */
+    suspend fun tmdbTitle(kind: String, tmdbId: Int): TmdbTitle? = withContext(Dispatchers.IO) {
+        loadGenres()
+        val body = try {
+            request(fancyfin, "/tmdb/$kind/$tmdbId?append_to_response=credits,videos,recommendations,similar")
+        } catch (e: ApiException) { return@withContext null }
+        val r = JSONObject(body)
+        val genres = ArrayList<String>()
+        r.optJSONArray("genres")?.let { for (i in 0 until it.length()) genres.add(it.getJSONObject(i).getString("name")) }
+        val cast = ArrayList<Person>()
+        r.optJSONObject("credits")?.optJSONArray("cast")?.let {
+            for (i in 0 until minOf(it.length(), 20)) {
+                val c = it.getJSONObject(i)
+                cast.add(Person(c.optString("name"), c.optString("character").takeIf { s -> s.isNotEmpty() }, tmdbImage(c.optString("profile_path").takeIf { s -> s != "null" }, "w185")))
+            }
+        }
+        val rec = r.optJSONObject("recommendations")?.optJSONArray("results")
+        val sim = r.optJSONObject("similar")?.optJSONArray("results")
+        val more = (if (rec != null && rec.length() > 0) parseTmdb(rec, kind) else if (sim != null) parseTmdb(sim, kind) else emptyList())
+            .filter { it.tmdbId != tmdbId }
+        val date = r.optString(if (kind == "movie") "release_date" else "first_air_date")
+        val runtime = if (kind == "movie") r.optInt("runtime") else r.optJSONArray("episode_run_time")?.optInt(0) ?: 0
+        val collection = r.optJSONObject("belongs_to_collection")
+        TmdbTitle(
+            kind = kind, id = tmdbId,
+            title = r.optString(if (kind == "movie") "title" else "name"),
+            tagline = r.optString("tagline").takeIf { it.isNotEmpty() },
+            overview = r.optString("overview").takeIf { it.isNotEmpty() },
+            year = date.take(4).toIntOrNull(),
+            rating = if (r.optDouble("vote_average", 0.0) > 0) r.getDouble("vote_average") else null,
+            runtimeMinutes = runtime,
+            genres = genres,
+            backdrop = tmdbImage(r.optString("backdrop_path").takeIf { it != "null" }, "w1280"),
+            poster = tmdbImage(r.optString("poster_path").takeIf { it != "null" }, "w342"),
+            cast = cast,
+            videos = parseVideos(r.optJSONObject("videos")?.optJSONArray("results")),
+            more = more,
+            collectionId = collection?.optInt("id")?.takeIf { it > 0 },
+            collectionName = collection?.optString("name"),
+        )
+    }
+
+    /** The other films in a franchise, in release order. */
+    suspend fun franchise(collectionId: Int): List<Discover> = withContext(Dispatchers.IO) {
+        loadGenres()
+        val body = try { request(fancyfin, "/tmdb/collection/$collectionId") } catch (e: ApiException) { return@withContext emptyList() }
+        val parts = JSONObject(body).optJSONArray("parts") ?: return@withContext emptyList()
+        val dated = ArrayList<Pair<String, JSONObject>>()
+        for (i in 0 until parts.length()) {
+            val p = parts.getJSONObject(i)
+            dated.add((p.optString("release_date").takeIf { it.isNotEmpty() } ?: "9999") to p)
+        }
+        dated.sortBy { it.first }
+        val sorted = JSONArray()
+        dated.forEach { sorted.put(it.second) }
+        parseTmdb(sorted, "movie")
     }
 
     private val statusCache = HashMap<Int, String>()
