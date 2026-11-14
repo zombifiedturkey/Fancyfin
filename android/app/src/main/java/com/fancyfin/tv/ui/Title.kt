@@ -149,6 +149,9 @@ fun TitleScreen(
     var franchise by remember { mutableStateOf<List<Discover>>(emptyList()) }
     var index by remember { mutableStateOf<Map<String, Item>>(emptyMap()) }
     var status by remember { mutableStateOf<String?>(null) }
+    // Radarr / Sonarr: null = not added, "adding", "added", or "in" (it was already there).
+    var arrState by remember { mutableStateOf<String?>(null) }
+    var arrNote by remember { mutableStateOf<String?>(null) }
     var note by remember { mutableStateOf<String?>(null) }
     var tmdbId by remember { mutableStateOf(ref.tmdbId) }
     val kind = ref.kind
@@ -179,6 +182,7 @@ fun TitleScreen(
                 val cid = t?.collectionId
                 if (cid != null) franchise = try { client.franchise(cid) } catch (e: Exception) { emptyList() }
             }
+            if (start == null) launch { if (client.inArr(kind, id) == true) arrState = "in" }
             if (start == null && kind == "movie") launch { status = try { client.releaseStatus(id) } catch (e: Exception) { null } }
         }
     }
@@ -337,9 +341,35 @@ fun TitleScreen(
                                     onClick = { onPlay(target) },
                                 )
                             }
-                            if (ref.server == null) {
-                                // Becomes "Add to Radarr / Sonarr" once the arr flow is in.
-                                GlassButton("Not on your server", {}, modifier = lead(), clear = true)
+                            val addId = tmdbId
+                            if (ref.server == null && addId != null) {
+                                val app = if (kind == "movie") "Radarr" else "Sonarr"
+                                GlassButton(
+                                    label = when (arrState) {
+                                        "in" -> "In $app ✓"
+                                        "adding" -> "Adding…"
+                                        "added" -> "Added to $app ✓"
+                                        else -> "Add to $app"
+                                    },
+                                    primary = arrState == null,
+                                    modifier = lead(),
+                                    onClick = {
+                                        if (arrState == null) {
+                                            arrState = "adding"
+                                            arrNote = null
+                                            scope.launch {
+                                                try {
+                                                    val message = client.addToArr(kind, addId)
+                                                    arrNote = message
+                                                    arrState = if (message.startsWith("Already")) "in" else "added"
+                                                } catch (e: Exception) {
+                                                    arrNote = e.message ?: "Couldn't add it."
+                                                    arrState = null
+                                                }
+                                            }
+                                        }
+                                    },
+                                )
                             }
                             if (shown != null) {
                                 GlassButton(
@@ -395,6 +425,7 @@ fun TitleScreen(
                                 } else if (ref.server == null) {
                                     Text("NOT ON YOUR SERVER", color = Palette.TextMuted, fontSize = 10.sp, letterSpacing = 1.2.sp)
                                     status?.let { Text(it, color = Palette.Accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
+                                    arrNote?.let { Text(it, color = Palette.Text, fontSize = 11.sp, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(260.dp)) }
                                 }
                             }
                         }

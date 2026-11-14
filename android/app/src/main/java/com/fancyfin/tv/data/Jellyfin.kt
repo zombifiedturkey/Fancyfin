@@ -108,11 +108,29 @@ class JellyfinClient(private val prefs: Prefs) {
                 connection.outputStream.use { it.write((body ?: JSONObject()).toString().toByteArray()) }
             }
             val code = connection.responseCode
-            if (code !in 200..299) throw ApiException("HTTP $code", code)
+            if (code !in 200..299) {
+                // Radarr and Sonarr explain refusals in the body; pass that on when there is one.
+                val text = try { connection.errorStream?.use { it.readBytes().toString(Charsets.UTF_8) } } catch (e: Exception) { null }
+                throw ApiException(readableError(text) ?: "HTTP $code", code)
+            }
             return connection.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
         } finally {
             connection.disconnect()
         }
+    }
+
+    private fun readableError(body: String?): String? {
+        if (body.isNullOrBlank()) return null
+        return try {
+            val t = body.trim()
+            if (t.startsWith("[")) {
+                val a = JSONArray(t)
+                (0 until a.length()).firstNotNullOfOrNull { a.optJSONObject(it)?.optString("errorMessage")?.takeIf { m -> m.isNotEmpty() } }
+            } else {
+                val o = JSONObject(t)
+                o.optString("message").ifEmpty { o.optString("error") }.takeIf { it.isNotEmpty() }
+            }
+        } catch (e: Exception) { null }
     }
 
     private suspend fun get(path: String): String = withContext(Dispatchers.IO) { request(server, path) }
@@ -472,6 +490,76 @@ class JellyfinClient(private val prefs: Prefs) {
         val sorted = JSONArray()
         dated.forEach { sorted.put(it.second) }
         parseTmdb(sorted, "movie")
+    }
+
+    // ---- Radarr and Sonarr (through the Fancyfin container) -----------------------------------
+
+    private fun arrPath(app: String, sub: String) = "/arr/$app/api/v3/$sub"
+
+    private fun tvdbId(tmdbId: Int): Int? =
+        JSONObject(request(fancyfin, "/tmdb/tv/$tmdbId/external_ids")).optInt("tvdb_id").takeIf { it > 0 }
+
+    /** True if Radarr (movies) or Sonarr (shows) already has this title; null if it couldn't be asked. */
+    suspend fun inArr(kind: String, tmdbId: Int): Boolean? = withContext(Dispatchers.IO) {
+        try {
+            if (kind == "movie") {
+                JSONArray(request(fancyfin, arrPath("radarr", "movie?tmdbId=$tmdbId"))).length() > 0
+            } else {
+                val tvdb = tvdbId(tmdbId) ?: return@withContext false
+                JSONArray(request(fancyfin, arrPath("sonarr", "series?tvdbId=$tvdb"))).length() > 0
+            }
+        } catch (e: Exception) { null }
+    }
+
+    /**
+     * Adds a movie to Radarr or a show to Sonarr, using the first quality profile and root folder it has
+     * and searching straight away, the same defaults as the web version's quick add. Returns what to tell
+     * the person; throws ApiException with a readable message when it can't.
+     */
+    suspend fun addToArr(kind: String, tmdbId: Int): String = withContext(Dispatchers.IO) {
+        val movie = kind == "movie"
+        val app = if (movie) "radarr" else "sonarr"
+        val label = if (movie) "Radarr" else "Sonarr"
+        val what = if (movie) "movie" else "series"
+        val term = if (movie) {
+            "tmdb:$tmdbId"
+        } else {
+            "tvdb:" + (tvdbId(tmdbId) ?: throw ApiException("TMDB has no TVDB id for this show, so Sonarr can't find it."))
+        }
+        val found = JSONArray(request(fancyfin, arrPath(app, "$what/lookup?term=" + URLEncoder.encode(term, "UTF-8"))))
+        var candidate: JSONObject? = null
+        for (i in 0 until found.length()) {
+            val c = found.getJSONObject(i)
+            val match = if (movie) c.optInt("tmdbId") == tmdbId else ("tvdb:" + c.optInt("tvdbId")) == term
+            if (match) { candidate = c; break }
+        }
+        if (candidate == null) throw ApiException("$label didn't return an exact match for this title.")
+        if (candidate.optInt("id") > 0) return@withContext "Already in $label."
+
+        val profiles = JSONArray(request(fancyfin, arrPath(app, "qualityprofile")))
+        val folders = JSONArray(request(fancyfin, arrPath(app, "rootfolder")))
+        if (profiles.length() == 0 || folders.length() == 0) {
+            throw ApiException("$label has no quality profile or root folder to add to.")
+        }
+        val body = JSONObject(candidate.toString())
+        body.remove("id")
+        body.put("qualityProfileId", profiles.getJSONObject(0).getInt("id"))
+        body.put("rootFolderPath", folders.getJSONObject(0).getString("path"))
+        body.put("monitored", true)
+        if (movie) {
+            body.put("minimumAvailability", "released")
+            body.put("addOptions", JSONObject().put("monitor", "movieOnly").put("searchForMovie", true))
+        } else {
+            body.put("seasonFolder", true)
+            val type = candidate.optString("seriesType")
+            body.put("seriesType", if (type == "standard" || type == "daily" || type == "anime") type else "standard")
+            body.put(
+                "addOptions",
+                JSONObject().put("monitor", "all").put("searchForMissingEpisodes", true).put("searchForCutoffUnmetEpisodes", false),
+            )
+        }
+        request(fancyfin, arrPath(app, what), "POST", body)
+        "Added to $label. It's searching for a copy now."
     }
 
     private val statusCache = HashMap<Int, String>()
