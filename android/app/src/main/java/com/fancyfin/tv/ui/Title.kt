@@ -611,50 +611,44 @@ fun PersonScreen(
     }
 
     val photo = info?.photo ?: ref.photo
+    // Everything fits on the one screen: no scrolling, posters kept at 2:3.
     Box(Modifier.fillMaxSize()) {
         Backdrop(photo)
-        LazyColumn(
-            Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = 28.dp, bottom = 60.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-        ) {
-            item {
-                Row(Modifier.padding(start = 24.dp, end = 24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                    Box(
-                        Modifier.width(190.dp).height(285.dp)
-                            .clip(RoundedCornerShape(UiSettings.corner.tile))
-                            .background(Palette.GlassFill),
-                    ) {
-                        if (photo != null) AsyncImage(model = photo, contentDescription = ref.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                    }
-                    Column(Modifier.width(560.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(info?.name ?: ref.name, color = Palette.Text, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-                        info?.born?.let { Text(it, color = Palette.Accent, fontSize = 12.sp) }
-                        val bio = info?.biography
-                        when {
-                            bio != null -> Text(bio, color = Palette.TextMuted, fontSize = 13.sp, maxLines = 12, overflow = TextOverflow.Ellipsis)
-                            error != null -> Text(error!!, color = Palette.Accent, fontSize = 13.sp)
-                            loaded -> Text("No biography available.", color = Palette.TextMuted, fontSize = 13.sp)
-                            else -> Text("Loading…", color = Palette.TextMuted, fontSize = 13.sp)
-                        }
+        Column(Modifier.fillMaxSize().padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(22.dp)) {
+                Box(
+                    Modifier.width(150.dp).height(225.dp)
+                        .clip(RoundedCornerShape(UiSettings.corner.tile))
+                        .background(Palette.GlassFill),
+                ) {
+                    if (photo != null) AsyncImage(model = photo, contentDescription = ref.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(info?.name ?: ref.name, color = Palette.Text, fontSize = 28.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    info?.born?.let { Text(it, color = Palette.Accent, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    val bio = info?.biography
+                    when {
+                        bio != null -> Text(bio, color = Palette.TextMuted, fontSize = 12.sp, maxLines = 11, overflow = TextOverflow.Ellipsis)
+                        error != null -> Text(error!!, color = Palette.Accent, fontSize = 13.sp)
+                        loaded -> Text("No biography available.", color = Palette.TextMuted, fontSize = 13.sp)
+                        else -> Text("Loading…", color = Palette.TextMuted, fontSize = 13.sp)
                     }
                 }
             }
             val credits = info?.credits ?: emptyList()
             if (credits.isNotEmpty()) {
-                item {
-                    Column {
-                        SectionTitle("Known for")
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 24.dp, vertical = 4.dp)) {
-                            items(credits.size) { i ->
-                                val d = credits[i]
-                                val here = index["${d.kind}:${d.tmdbId}"]
-                                PosterTile(
-                                    url = d.poster, title = d.title, onServer = here != null, current = false,
-                                    modifier = if (i == 0) Modifier.focusRequester(first) else Modifier,
-                                    onClick = { onOpen(TitleRef(d.kind, d.tmdbId, here, d.title, d.backdrop, d.poster)) },
-                                )
-                            }
+                Column {
+                    SectionTitle("Known for")
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 24.dp, vertical = 4.dp)) {
+                        items(credits.size) { i ->
+                            val d = credits[i]
+                            val here = index["${d.kind}:${d.tmdbId}"]
+                            PosterTile(
+                                url = d.poster, title = d.title, onServer = here != null, current = false,
+                                width = 90.dp, height = 135.dp,
+                                modifier = if (i == 0) Modifier.focusRequester(first) else Modifier,
+                                onClick = { onOpen(TitleRef(d.kind, d.tmdbId, here, d.title, d.backdrop, d.poster)) },
+                            )
                         }
                     }
                 }
