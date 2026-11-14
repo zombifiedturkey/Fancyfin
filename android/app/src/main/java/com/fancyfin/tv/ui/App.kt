@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 private sealed class Route {
     data class Main(val tab: Tab) : Route()
     data class Detail(val item: Item) : Route()
+    data class Genre(val genre: String, val types: String) : Route()
     data class Play(val item: Item, val sourceId: String?) : Route()
 }
 
@@ -60,6 +61,7 @@ fun FancyfinApp() {
                 stack.add(Route.Main(tab))
             }
             val open: (Item) -> Unit = { item -> stack.add(Route.Detail(item)) }
+            val openGenre: (String, String) -> Unit = { genre, types -> stack.add(Route.Genre(genre, types)) }
             // Playing a title that has more than one version asks which one first.
             val play: (Item) -> Unit = { item ->
                 scope.launch {
@@ -75,11 +77,12 @@ fun FancyfinApp() {
 
             when (val route = stack.last()) {
                 is Route.Main -> when (route.tab) {
-                    Tab.Home, Tab.Movies, Tab.Shows -> BrowseScreen(route.tab, client, open, play, goTab, signOut)
+                    Tab.Home, Tab.Movies, Tab.Shows -> BrowseScreen(route.tab, client, open, play, openGenre, goTab, signOut)
                     Tab.Search -> SearchScreen(client, open, goTab, signOut)
                     Tab.Settings -> SettingsScreen(goTab, signOut)
                     Tab.AllMovies, Tab.AllShows -> LibraryScreen(route.tab, client, open, goTab, signOut)
                 }
+                is Route.Genre -> GenreScreen(route.genre, route.types, client, open, play, goTab, signOut)
                 is Route.Detail -> DetailScreen(route.item, client, play, open)
                 is Route.Play -> PlayerScreen(route.item, client, route.sourceId, back)
             }
