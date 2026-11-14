@@ -174,7 +174,7 @@ private fun titleRef(e: HeroEntry) = TitleRef(e.kind, e.tmdbId, e.onServer, e.ti
 /** "Close Fancyfin?" in glass. Back or Stay dismisses it. */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun ExitPrompt(onStay: () -> Unit, onClose: () -> Unit) {
+internal fun ExitPrompt(onStay: () -> Unit, onClose: () -> Unit) {
     val stay = remember { FocusRequester() }
     BackHandler { onStay() }
     LaunchedEffect(Unit) {
@@ -231,6 +231,12 @@ fun FeatureList(
     val requesters = remember { HashMap<Int, HashMap<Int, FocusRequester>>() }
 
     LaunchedEffect(focusRow) { columnState.animateScrollToItem(focusRow) }
+
+    // Land on the first tile of the first row when the page opens.
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(250)
+        try { requesters[0]?.get(0)?.requestFocus() } catch (e: Exception) { /* not laid out yet */ }
+    }
 
     // Back: first jump to the start of the row you're on; from there, ask whether to close the app.
     val atStart = focusRow < sections.size && (selected[focusRow] ?: 0) == 0

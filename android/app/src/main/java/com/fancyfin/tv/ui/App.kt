@@ -38,21 +38,22 @@ fun FancyfinApp() {
     var signedIn by remember { mutableStateOf(client.isSignedIn) }
     val stack = remember { mutableStateListOf<Route>(Route.Main(Tab.Home)) }
     val scope = rememberCoroutineScope()
+    var askExit by remember { mutableStateOf(false) }
     var trailer by remember { mutableStateOf<List<String>?>(null) }
     var choice by remember { mutableStateOf<Pair<Item, List<MediaVersion>>?>(null) }
 
     TvScale {
         Box(Modifier.fillMaxSize().background(Palette.Background)) {
             if (!signedIn) {
+                BackHandler { askExit = true }
                 SignInScreen(client) {
                     stack.clear()
                     stack.add(Route.Main(Tab.Home))
                     signedIn = true
                 }
+                if (askExit) ExitPrompt(onStay = { askExit = false }, onClose = { (context as? android.app.Activity)?.finish() })
                 return@Box
             }
-
-            BackHandler(enabled = stack.size > 1) { stack.removeAt(stack.lastIndex) }
 
             val signOut = {
                 prefs.signOut()
@@ -61,6 +62,16 @@ fun FancyfinApp() {
             val goTab: (Tab) -> Unit = { tab ->
                 stack.clear()
                 stack.add(Route.Main(tab))
+            }
+            // The last stop for Back: step back through the pages, then to Home, then ask before closing.
+            // Screens with their own Back handling (menus, dialogs, the Home rows) take it first.
+            BackHandler {
+                val here = stack.last()
+                when {
+                    stack.size > 1 -> stack.removeAt(stack.lastIndex)
+                    here is Route.Main && here.tab != Tab.Home -> goTab(Tab.Home)
+                    else -> askExit = true
+                }
             }
             val open: (Item) -> Unit = { item -> stack.add(Route.Title(TitleRef.of(item))) }
             val openTitle: (TitleRef) -> Unit = { ref -> stack.add(Route.Title(ref)) }
@@ -95,6 +106,8 @@ fun FancyfinApp() {
                 is Route.Person -> androidx.compose.runtime.key(route.ref) { PersonScreen(route.ref, client, openTitle) }
                 is Route.Play -> PlayerScreen(route.item, client, route.sourceId, back)
             }
+
+            if (askExit) ExitPrompt(onStay = { askExit = false }, onClose = { (context as? android.app.Activity)?.finish() })
 
             trailer?.let { keys -> TrailerPlayer(keys) { trailer = null } }
 
