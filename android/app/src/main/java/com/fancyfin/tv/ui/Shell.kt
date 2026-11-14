@@ -26,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -54,6 +55,11 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 
+/** The wallpaper currently showing, so the menu can frost it. */
+object WallpaperState {
+    var url by mutableStateOf<String?>(null)
+}
+
 enum class Tab(val label: String, val section: String) {
     Home("Home", "Browse"),
     Movies("Movies", "Browse"),
@@ -71,6 +77,7 @@ enum class Tab(val label: String, val section: String) {
  */
 @Composable
 fun Backdrop(url: String?) {
+    SideEffect { WallpaperState.url = url }
     Box(Modifier.fillMaxSize().background(Palette.Background)) {
         if (UiSettings.backgroundPicture && url != null) {
             Crossfade(targetState = url, label = "backdrop") { target ->
@@ -156,14 +163,17 @@ fun Shell(
             exit = slideOutHorizontally { -it } + fadeOut(),
         ) {
             val panel = RoundedCornerShape(UiSettings.corner.tile.coerceAtLeast(0.dp))
+            Box(Modifier.padding(14.dp).width(220.dp).fillMaxHeight().clip(panel)) {
+                // Frosted glass: the wallpaper (already a tiny, stretched picture) behind a dark tint.
+                val wall = WallpaperState.url
+                if (wall != null && UiSettings.backgroundPicture) {
+                    AsyncImage(model = wall, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                }
+                Box(Modifier.fillMaxSize().background(Color(0xFF0B0D12).copy(alpha = if (wall != null && UiSettings.backgroundPicture) maxOf(UiSettings.glass.panel, 0.72f) else 0.95f)))
             Column(
                 Modifier
-                    .padding(14.dp)
-                    .width(220.dp)
-                    .fillMaxHeight()
-                    .clip(panel)
+                    .fillMaxSize()
                     // Dark glass with a soft sheen from the top, and an edge that catches the light.
-                    .background(Color(0xFF0B0D12).copy(alpha = maxOf(UiSettings.glass.panel, 0.93f)))
                     .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.14f), Color.White.copy(alpha = 0.02f))))
                     .border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.45f), Color.White.copy(alpha = 0.10f))), panel)
                     .focusProperties { exit = { FocusRequester.Cancel } }
@@ -199,6 +209,7 @@ fun Shell(
                 Box(Modifier.weight(1f))
                 MenuItem("Sign out", false, Modifier, onSignOut)
                 Box(Modifier.height(16.dp))
+            }
             }
         }
     }
