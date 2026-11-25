@@ -60,6 +60,21 @@ enum class AccentChoice(val label: String, val color: Color) {
     Silver("Silver", Color(0xFFC4C9D4)),
 }
 
+/** The base colour behind everything, separate from the accent. */
+enum class BackgroundChoice(val label: String, val color: Color) {
+    Midnight("Midnight", Color(0xFF07080B)),
+    Black("Black", Color(0xFF000000)),
+    Charcoal("Charcoal", Color(0xFF14161A)),
+    Grey("Grey", Color(0xFF24272D)),
+    Slate("Slate", Color(0xFF1A2230)),
+    Navy("Navy", Color(0xFF0A1530)),
+    Blue("Deep Blue", Color(0xFF0B2250)),
+    Red("Dark Red", Color(0xFF2E0A10)),
+    Maroon("Maroon", Color(0xFF45121F)),
+    Green("Forest", Color(0xFF0B2418)),
+    Plum("Plum", Color(0xFF260D33)),
+}
+
 /** Look-and-feel choices, remembered between launches. Reading them in a screen updates it when they change. */
 object UiSettings {
     var corner by mutableStateOf(Corner.Light)
@@ -73,6 +88,8 @@ object UiSettings {
     var accent by mutableStateOf(AccentChoice.Teal)
         private set
     var backgroundPicture by mutableStateOf(true)
+        private set
+    var background by mutableStateOf(BackgroundChoice.Midnight)
         private set
     /** Preferred audio language code for playback ("" = whatever the file says first). */
     var audioLang by mutableStateOf("")
@@ -101,6 +118,7 @@ object UiSettings {
         glass = Glass.values().firstOrNull { it.name == p.getString("ui_glass", null) } ?: Glass.Balanced
         accent = AccentChoice.values().firstOrNull { it.name == p.getString("ui_accent", null) } ?: AccentChoice.Teal
         backgroundPicture = p.getBoolean("ui_bg_picture", true)
+        background = BackgroundChoice.values().firstOrNull { it.name == p.getString("ui_bg_colour", null) } ?: BackgroundChoice.Midnight
         askArr = p.getBoolean("ui_ask_arr", true)
         audioLang = p.getString("pl_audio", "") ?: ""
         subLang = p.getString("pl_sub", "") ?: ""
@@ -167,6 +185,11 @@ object UiSettings {
         prefs?.edit()?.putString("ui_accent", value.name)?.apply()
     }
 
+    fun chooseBackground(value: BackgroundChoice) {
+        background = value
+        prefs?.edit()?.putString("ui_bg_colour", value.name)?.apply()
+    }
+
     fun chooseBackgroundPicture(value: Boolean) {
         backgroundPicture = value
         prefs?.edit()?.putBoolean("ui_bg_picture", value)?.apply()
@@ -229,6 +252,21 @@ fun SettingsScreen(client: com.fancyfin.tv.data.JellyfinClient, onTab: (Tab) -> 
                         ) {
                             Box(Modifier.fillMaxSize().background(a.color), contentAlignment = Alignment.Center) {
                                 if (a == UiSettings.accent) Text("✓", color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
+                SettingRow("Background colour  —  " + UiSettings.background.label) {
+                    BackgroundChoice.values().forEach { b ->
+                        FocusBox(
+                            onClick = { UiSettings.chooseBackground(b) },
+                            modifier = Modifier.size(34.dp),
+                            shape = RoundedCornerShape(50),
+                            focusedScale = 1.15f,
+                        ) {
+                            Box(Modifier.fillMaxSize().background(b.color), contentAlignment = Alignment.Center) {
+                                if (b == UiSettings.background) Text("✓", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }

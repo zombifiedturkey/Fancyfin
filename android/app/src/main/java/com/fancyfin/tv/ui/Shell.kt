@@ -107,7 +107,7 @@ fun Backdrop(url: String?) {
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-            Box(Modifier.fillMaxSize().background(Color(0xB307080B)))
+            Box(Modifier.fillMaxSize().background(Palette.Background.copy(alpha = 0.70f)))
         } else {
             val accent = Palette.Accent
             Box(
@@ -124,7 +124,7 @@ fun Backdrop(url: String?) {
         }
         Box(
             Modifier.fillMaxSize().background(
-                Brush.verticalGradient(0f to Color(0x4007080B), 1f to Color(0xF207080B)),
+                Brush.verticalGradient(0f to Palette.Background.copy(alpha = 0.25f), 1f to Palette.Background.copy(alpha = 0.95f)),
             ),
         )
     }

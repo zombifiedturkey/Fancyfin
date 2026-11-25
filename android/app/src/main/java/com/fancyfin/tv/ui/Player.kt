@@ -189,7 +189,7 @@ private fun Thumbnail(url: String, tileW: Int, tileH: Int, col: Int, row: Int, w
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun TrackMenu(player: ExoPlayer, tick: Int, prevEp: Item?, nextEp: Item?, onEpisode: (Item) -> Unit, onFindSubtitles: () -> Unit, onClose: () -> Unit) {
+private fun TrackMenu(player: ExoPlayer, tick: Int, prevEp: Item?, nextEp: Item?, focusEpisodes: Boolean, onEpisode: (Item) -> Unit, onFindSubtitles: () -> Unit, onClose: () -> Unit) {
     BackHandler { onClose() }
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) {
@@ -268,13 +268,13 @@ private fun TrackMenu(player: ExoPlayer, tick: Int, prevEp: Item?, nextEp: Item?
                     }
                 }
             }
-            column("AUDIO", audio, lead = true)
+            column("AUDIO", audio, lead = !focusEpisodes)
             text.add(Entry("＋ Find subtitles online…", false) { onFindSubtitles() })
-            column("SUBTITLES", text, lead = audio.isEmpty())
+            column("SUBTITLES", text, lead = audio.isEmpty() && !focusEpisodes)
             val episodes = ArrayList<Entry>()
             prevEp?.let { e -> episodes.add(Entry("◀ Previous: " + listOfNotNull(e.episodeLabel, e.name).joinToString(" · "), false) { onEpisode(e) }) }
             nextEp?.let { e -> episodes.add(Entry("Next: " + listOfNotNull(e.episodeLabel, e.name).joinToString(" · ") + " ▶", false) { onEpisode(e) }) }
-            if (episodes.isNotEmpty()) column("EPISODE", episodes, lead = false)
+            if (episodes.isNotEmpty()) column("EPISODE", episodes, lead = focusEpisodes)
         }
     }
 }
@@ -341,6 +341,7 @@ private fun PlayerBody(
     var interaction by remember { mutableStateOf(0) }
     var menuOpen by remember { mutableStateOf(false) }
     var subSearch by remember { mutableStateOf(false) }
+    var menuEpisodes by remember { mutableStateOf(false) }
     var position by remember { mutableStateOf(startMs) }
     var duration by remember { mutableStateOf(item.runtimeTicks / TICKS_PER_MS) }
     var buffered by remember { mutableStateOf(0L) }
@@ -577,8 +578,8 @@ private fun PlayerBody(
                         scrub = ((scrub ?: position) + if (forward) step else -step).coerceIn(0L, maxOf(duration, 0L))
                         controls = true
                     }
-                    Key.DirectionUp -> if (!controls) controls = true else menuOpen = true
-                    Key.DirectionDown -> controls = false
+                    Key.DirectionUp -> if (!controls) controls = true else { menuEpisodes = false; menuOpen = true }
+                    Key.DirectionDown -> if (controls && (nextEp != null || prevEp != null)) { menuEpisodes = true; menuOpen = true } else controls = false
                     Key.MediaNext -> if (nextEp != null) onNext(nextEp) else chapterJump(true)
                     Key.MediaPrevious -> if (prevEp != null && position < 8_000) onNext(prevEp) else if (media.chapters.isNotEmpty()) chapterJump(false) else player.seekTo(0)
                     else -> return@onPreviewKeyEvent false
@@ -682,7 +683,7 @@ private fun PlayerBody(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(chapter?.name ?: "", color = Palette.TextMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(300.dp))
                     Text(
-                        "◀ ▶ Seek      ▲ Audio, subtitles and episodes      OK Pause" + if (nextEp != null || prevEp != null) "      ⏮ ⏭ Episodes" else if (media.chapters.isNotEmpty()) "      ⏮ ⏭ Chapters" else "",
+                        "◀ ▶ Seek      ▲ Audio and subtitles      OK Pause" + if (nextEp != null || prevEp != null) "      ▼ Previous / next episode" else if (media.chapters.isNotEmpty()) "      ⏮ ⏭ Chapters" else "",
                         color = Palette.TextMuted, fontSize = 11.sp,
                     )
                 }
@@ -720,7 +721,7 @@ private fun PlayerBody(
             }
         }
 
-        if (menuOpen) TrackMenu(player, tracksTick, prevEp, nextEp, { onNext(it) }, { menuOpen = false; subSearch = true }) { menuOpen = false }
+        if (menuOpen) TrackMenu(player, tracksTick, prevEp, nextEp, menuEpisodes, { onNext(it) }, { menuOpen = false; subSearch = true }) { menuOpen = false }
         if (subSearch) SubtitleSearch(client, item, onAdded = { subSearch = false; onSubtitleAdded(player.currentPosition) }) { subSearch = false }
     }
 }
