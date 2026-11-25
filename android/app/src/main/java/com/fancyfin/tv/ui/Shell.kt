@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -88,6 +89,7 @@ enum class Tab(val label: String, val section: String, val inMenu: Boolean = tru
     AllMovies("All movies", "Library", false),
     AllShows("All shows", "Library", false),
     Attention("Needs attention", "System", false),
+    Downloads("Downloads", "System", false),
     Settings("Settings", "System"),
 }
 
@@ -320,6 +322,7 @@ fun Shell(
                     MenuHeading("SYSTEM")
                     if (UiSettings.advanced) {
                         MenuItem("Needs attention", current == Tab.Attention, Icons.Filled.Warning, Modifier, { onTab(Tab.Attention) })
+                        MenuItem("Downloads", current == Tab.Downloads, Icons.Filled.KeyboardArrowDown, Modifier, { onTab(Tab.Downloads) })
                     }
                     MenuItem("Settings", current == Tab.Settings, tabIcon(Tab.Settings), Modifier, { onTab(Tab.Settings) })
                 }

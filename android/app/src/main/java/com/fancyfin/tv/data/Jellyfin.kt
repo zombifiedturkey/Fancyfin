@@ -129,12 +129,13 @@ class JellyfinClient(private val prefs: Prefs) {
         method: String = "GET",
         body: JSONObject? = null,
         withToken: Boolean = true,
+        readTimeoutMs: Int = 20_000,
     ): String {
         val connection = URL(base.trimEnd('/') + path).openConnection() as HttpURLConnection
         try {
             connection.requestMethod = method
             connection.connectTimeout = 8_000
-            connection.readTimeout = 20_000
+            connection.readTimeout = readTimeoutMs
             connection.setRequestProperty("Accept", "application/json")
             connection.setRequestProperty("Authorization", authHeader(withToken))
             if (body != null || method == "POST") {
@@ -1126,6 +1127,111 @@ class JellyfinClient(private val prefs: Prefs) {
             request(fancyfin, arrPath(app, what), "POST", body)
             "Added to $label" + (if (season != null) " (season $season)" else "") + ". It's searching for a copy now."
         }
+
+    // ---- Managing a title in Radarr / Sonarr (advanced mode) ---------------------------------
+
+    private fun arrApp(kind: String) = if (kind == "movie") "radarr" else "sonarr"
+    private fun arrWhat(kind: String) = if (kind == "movie") "movie" else "series"
+
+    /** The Radarr movie or Sonarr series record for a title, or null when it isn't there. */
+    suspend fun arrFind(kind: String, tmdbId: Int): JSONObject? = withContext(Dispatchers.IO) {
+        val path = if (kind == "movie") "movie?tmdbId=$tmdbId" else {
+            val tvdb = tvdbId(tmdbId) ?: throw ApiException("TMDB has no TVDB id for this show, so Sonarr can't find it.")
+            "series?tvdbId=$tvdb"
+        }
+        val arr = JSONArray(request(fancyfin, arrPath(arrApp(kind), path)))
+        if (arr.length() > 0) arr.getJSONObject(0) else null
+    }
+
+    suspend fun arrProfiles(kind: String): List<Pair<Int, String>> = withContext(Dispatchers.IO) {
+        val arr = JSONArray(request(fancyfin, arrPath(arrApp(kind), "qualityprofile")))
+        (0 until arr.length()).map { arr.getJSONObject(it).let { o -> o.getInt("id") to o.optString("name") } }
+    }
+
+    /** Saves a changed Radarr movie or Sonarr series record (monitoring, quality profile, seasons). */
+    suspend fun arrSave(kind: String, json: JSONObject) = withContext(Dispatchers.IO) {
+        request(fancyfin, arrPath(arrApp(kind), "${arrWhat(kind)}/${json.getInt("id")}"), "PUT", json)
+        Unit
+    }
+
+    suspend fun arrRemove(kind: String, id: Int, deleteFiles: Boolean) = withContext(Dispatchers.IO) {
+        request(fancyfin, arrPath(arrApp(kind), "${arrWhat(kind)}/$id?deleteFiles=$deleteFiles&addImportExclusion=false"), "DELETE")
+        Unit
+    }
+
+    /** Starts one of the app's searches: "MoviesSearch" (movieIds), "SeriesSearch" (seriesId), "SeasonSearch" (seriesId, seasonNumber). */
+    suspend fun arrCommand(kind: String, name: String, args: JSONObject) = withContext(Dispatchers.IO) {
+        request(fancyfin, arrPath(arrApp(kind), "command"), "POST", JSONObject(args.toString()).put("name", name))
+        Unit
+    }
+
+    class ArrRelease(val json: JSONObject, val title: String, val quality: String, val sizeBytes: Long, val seeders: Int?, val indexer: String, val rejected: Boolean, val reason: String?, val ageDays: Int)
+
+    suspend fun arrReleases(kind: String, id: Int, season: Int? = null): List<ArrRelease> = withContext(Dispatchers.IO) {
+        val query = if (kind == "movie") "movieId=$id" else "seriesId=$id&seasonNumber=${season ?: 1}"
+        val arr = JSONArray(request(fancyfin, arrPath(arrApp(kind), "release?$query"), readTimeoutMs = 80_000))
+        val out = ArrayList<ArrRelease>()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val rej = o.optJSONArray("rejections")
+            out.add(
+                ArrRelease(
+                    o, o.optString("title"), o.optJSONObject("quality")?.optJSONObject("quality")?.optString("name").orEmpty(),
+                    o.optLong("size"), if (o.has("seeders") && !o.isNull("seeders")) o.optInt("seeders") else null,
+                    o.optString("indexer"), o.optBoolean("rejected"),
+                    if (rej != null && rej.length() > 0) rej.optString(0) else null,
+                    (o.optDouble("ageHours", 0.0) / 24).toInt().let { if (it == 0 && o.has("age")) o.optInt("age") else it },
+                ),
+            )
+        }
+        out.sortedWith(compareBy<ArrRelease> { it.rejected }.thenByDescending { it.seeders ?: 0 })
+    }
+
+    /** Tells the app to download that release. */
+    suspend fun arrGrab(kind: String, release: ArrRelease) = withContext(Dispatchers.IO) {
+        val body = JSONObject().put("guid", release.json.optString("guid")).put("indexerId", release.json.optInt("indexerId"))
+        request(fancyfin, arrPath(arrApp(kind), "release"), "POST", body)
+        Unit
+    }
+
+    class QueueItem(val kind: String, val id: Int, val title: String, val status: String, val progress: Float, val timeLeft: String?, val error: String?)
+
+    /** What Radarr and Sonarr are downloading right now. Either one being unreachable just leaves it out. */
+    suspend fun arrQueue(): List<QueueItem> = withContext(Dispatchers.IO) {
+        val out = ArrayList<QueueItem>()
+        for (kind in listOf("movie", "series")) {
+            try {
+                val flags = if (kind == "movie") "includeMovie=true" else "includeSeries=true&includeEpisode=true"
+                val records = JSONObject(request(fancyfin, arrPath(arrApp(kind), "queue?page=1&pageSize=100&$flags"))).optJSONArray("records") ?: continue
+                for (i in 0 until records.length()) {
+                    val o = records.getJSONObject(i)
+                    val size = o.optDouble("size", 0.0)
+                    val left = o.optDouble("sizeleft", 0.0)
+                    val name = if (kind == "movie") o.optJSONObject("movie")?.optString("title") else {
+                        val ep = o.optJSONObject("episode")
+                        o.optJSONObject("series")?.optString("title")?.let { t ->
+                            if (ep != null) "$t  S${ep.optInt("seasonNumber")}:E${ep.optInt("episodeNumber")}" else t
+                        }
+                    }
+                    out.add(
+                        QueueItem(
+                            kind, o.getInt("id"), name ?: o.optString("title"),
+                            o.optString("trackedDownloadState").ifEmpty { o.optString("status") },
+                            if (size > 0) ((size - left) / size).toFloat().coerceIn(0f, 1f) else 0f,
+                            o.optString("timeleft").takeIf { it.isNotEmpty() },
+                            o.optString("errorMessage").takeIf { it.isNotEmpty() },
+                        ),
+                    )
+                }
+            } catch (e: Exception) { /* that app isn't connected or isn't answering */ }
+        }
+        out
+    }
+
+    suspend fun arrRemoveFromQueue(kind: String, id: Int, blocklist: Boolean) = withContext(Dispatchers.IO) {
+        request(fancyfin, arrPath(arrApp(kind), "queue/$id?removeFromClient=true&blocklist=$blocklist"), "DELETE")
+        Unit
+    }
 
     private val statusCache = HashMap<Int, String>()
 

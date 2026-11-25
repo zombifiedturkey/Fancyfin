@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
 	allowedCall,
+	allowedCommand,
 	createServer,
 	normalizeUrl,
 	validKey,
@@ -91,6 +92,30 @@ describe("helpers", () => {
 		expect(allowedCall("radarr", "GET", "api/v3/system/status")).toBe(false);
 		expect(allowedCall("radarr", "POST", "api/v3/series")).toBe(false);
 		expect(allowedCall("nope", "GET", "api/v3/rootfolder")).toBe(false);
+	});
+
+	it("allows editing one title, searching and the queue", () => {
+		expect(allowedCall("radarr", "PUT", "api/v3/movie/12")).toBe(true);
+		expect(allowedCall("radarr", "PUT", "api/v3/movie")).toBe(false);
+		expect(allowedCall("radarr", "PUT", "api/v3/series/12")).toBe(false);
+		expect(
+			allowedCall("sonarr", "DELETE", "api/v3/series/7", "?deleteFiles=true"),
+		).toBe(true);
+		expect(
+			allowedCall("sonarr", "DELETE", "api/v3/series/7", "?evil=true"),
+		).toBe(false);
+		expect(allowedCall("radarr", "DELETE", "api/v3/queue/3")).toBe(true);
+		expect(allowedCall("radarr", "GET", "api/v3/release", "?movieId=4")).toBe(
+			true,
+		);
+		expect(allowedCall("radarr", "GET", "api/v3/release")).toBe(true);
+		expect(allowedCall("radarr", "GET", "api/v3/release", "?x=1")).toBe(false);
+		expect(allowedCall("radarr", "POST", "api/v3/command")).toBe(true);
+		expect(allowedCall("radarr", "GET", "api/v3/system/status")).toBe(false);
+		expect(allowedCommand("radarr", '{"name":"MoviesSearch"}')).toBe(true);
+		expect(allowedCommand("radarr", '{"name":"DeleteLogFiles"}')).toBe(false);
+		expect(allowedCommand("sonarr", '{"name":"MoviesSearch"}')).toBe(false);
+		expect(allowedCommand("sonarr", "nope")).toBe(false);
 	});
 });
 

@@ -45,7 +45,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** Which tool is open on the edit page. */
-private enum class EditPanel { None, Backdrop, Primary, Logo, Thumb, Match, Details, Merge, Delete }
+private enum class EditPanel { None, Backdrop, Primary, Logo, Thumb, Match, Details, Merge, Delete, Arr }
 
 /**
  * Advanced mode: change a title's pictures, fix its match, or have the server re-read it.
@@ -128,6 +128,9 @@ fun EditScreen(item: Item, client: JellyfinClient, onGone: () -> Unit = {}) {
                                 )
                             }
                         }
+                        if (item.isMovie || item.isSeries) {
+                            GlassButton("Manage in " + (if (item.isMovie) "Radarr" else "Sonarr") + "…", { panel = EditPanel.Arr }, w)
+                        }
                         GlassButton("Delete from server…", { panel = EditPanel.Delete }, w)
                     }
                 }
@@ -135,6 +138,7 @@ fun EditScreen(item: Item, client: JellyfinClient, onGone: () -> Unit = {}) {
             }
             EditPanel.Details -> DetailsPanel(item, client, onDone = { note = it; panel = EditPanel.None }, onClose = { panel = EditPanel.None })
             EditPanel.Merge -> MergePanel(item, client, onDone = { note = it; panel = EditPanel.None }, onClose = { panel = EditPanel.None })
+            EditPanel.Arr -> ArrPanel(item, client) { panel = EditPanel.None }
             EditPanel.Delete -> DeletePanel(item, client, onGone = onGone, onClose = { panel = EditPanel.None })
             EditPanel.Match -> MatchPanel(item, client, onDone = { note = it; panel = EditPanel.None }, onClose = { panel = EditPanel.None })
             else -> {

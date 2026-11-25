@@ -51,20 +51,54 @@ export function validKey(key) {
 	return typeof key === "string" && /^[A-Za-z0-9._-]{8,1000}$/.test(key);
 }
 
+const FLAG = /^(true|false)$/;
+
+/** True when every query parameter is one of `names` (with `check` testing its value). */
+function onlyParams(search, names) {
+	const params = new URLSearchParams(search);
+	for (const [key, value] of params) {
+		const check = names[key];
+		if (!check || !check.test(value)) return false;
+	}
+	return true;
+}
+
+const DIGITS = /^\d{1,9}$/;
+
 /**
- * Is this call one the Add dialog needs? `sub` is what follows /arr/<app>/, for example
+ * Is this call one the app makes? `sub` is what follows /arr/<app>/, for example
  * "api/v3/qualityprofile". `search` is the query string. Everything else is refused.
  * Looking one title up in the library (movie?tmdbId=, series?tvdbId=) is fine; listing the whole
- * library is not.
+ * library is not. Changing or removing one title by its id, searching, picking a release and the
+ * download queue are allowed for the Edit and Downloads pages.
  */
 export function allowedCall(app, method, sub, search = "") {
 	const kind = APPS[app]?.kind;
 	if (!kind) return false;
+	const one = new RegExp(`^api/v3/${kind}/\\d{1,9}$`);
+	const queueOne = /^api\/v3\/queue\/\d{1,9}$/;
 	if (method === "GET") {
 		if (sub === `api/v3/${kind}`) {
 			const params = new URLSearchParams(search);
 			return /^\d+$/.test(
 				params.get(kind === "movie" ? "tmdbId" : "tvdbId") ?? "",
+			);
+		}
+		if (sub === "api/v3/queue") {
+			return onlyParams(search, {
+				page: DIGITS,
+				pageSize: DIGITS,
+				includeMovie: FLAG,
+				includeSeries: FLAG,
+				includeEpisode: FLAG,
+			});
+		}
+		if (sub === "api/v3/release") {
+			return onlyParams(
+				search,
+				kind === "movie"
+					? { movieId: DIGITS }
+					: { episodeId: DIGITS, seriesId: DIGITS, seasonNumber: DIGITS },
 			);
 		}
 		return [
@@ -73,8 +107,45 @@ export function allowedCall(app, method, sub, search = "") {
 			`api/v3/${kind}/lookup`,
 		].includes(sub);
 	}
-	if (method === "POST") return sub === `api/v3/${kind}`;
+	if (method === "POST") {
+		return [`api/v3/${kind}`, "api/v3/command", "api/v3/release"].includes(
+			sub,
+		);
+	}
+	if (method === "PUT") return one.test(sub) && search === "";
+	if (method === "DELETE") {
+		if (one.test(sub)) {
+			return onlyParams(search, {
+				deleteFiles: FLAG,
+				addImportExclusion: FLAG,
+			});
+		}
+		if (queueOne.test(sub)) {
+			return onlyParams(search, { removeFromClient: FLAG, blocklist: FLAG });
+		}
+	}
 	return false;
+}
+
+/** The searches and refreshes a command call may start. Anything else is refused. */
+const COMMANDS = {
+	radarr: ["MoviesSearch", "RefreshMovie", "RescanMovie"],
+	sonarr: [
+		"SeriesSearch",
+		"SeasonSearch",
+		"EpisodeSearch",
+		"RefreshSeries",
+		"RescanSeries",
+	],
+};
+
+export function allowedCommand(app, body) {
+	try {
+		const name = JSON.parse(body)?.name;
+		return typeof name === "string" && (COMMANDS[app] ?? []).includes(name);
+	} catch {
+		return false;
+	}
 }
 
 /** Where config.json lives, and whether that folder survives the container being replaced. */
@@ -160,7 +231,7 @@ export function createServer({ configDir, tmdbBase = TMDB_BASE }) {
 					...(body === undefined ? {} : { "Content-Type": "application/json" }),
 				},
 				body,
-				signal: AbortSignal.timeout(20_000),
+				signal: AbortSignal.timeout(75_000),
 			});
 		} catch {
 			throw new HttpFailure(
@@ -433,9 +504,15 @@ export function createServer({ configDir, tmdbBase = TMDB_BASE }) {
 			);
 		}
 		const body =
-			method === "POST"
+			method === "POST" || method === "PUT"
 				? (await readBody(request)).toString("utf8")
 				: undefined;
+		if (
+			sub === "api/v3/command" &&
+			(body === undefined || !allowedCommand(app, body))
+		) {
+			throw new HttpFailure(404, "Not found.");
+		}
 		const upstream = await callApp(
 			app,
 			config,

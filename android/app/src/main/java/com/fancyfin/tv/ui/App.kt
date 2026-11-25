@@ -146,6 +146,7 @@ fun FancyfinApp() {
                     Tab.Search -> SearchScreen(searchState, client, open, goTab, signOut)
                     Tab.Collections -> CollectionsScreen(client, collections, { stack.add(Route.Collection(it)) }, goTab, signOut)
                     Tab.Settings -> SettingsScreen(client, goTab, signOut)
+                    Tab.Downloads -> DownloadsScreen(client, goTab, signOut)
                     Tab.Attention -> AttentionScreen(client, { stack.add(Route.Edit(it)) }, goTab, signOut)
                     Tab.AllMovies, Tab.AllShows -> LibraryScreen(route.tab, client, open, goTab, signOut)
                 }
