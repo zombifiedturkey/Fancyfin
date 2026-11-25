@@ -24,6 +24,7 @@ private sealed class Route {
     data class Main(val tab: Tab) : Route()
     data class Title(val ref: TitleRef) : Route()
     data class Person(val ref: PersonRef) : Route()
+    data class Edit(val item: Item) : Route()
     data class Genre(val genre: String, val types: String) : Route()
     data class Play(val item: Item, val sourceId: String?, val maxHeight: Int? = null) : Route()
     data class Collection(val tile: com.fancyfin.tv.data.CollectionTile) : Route()
@@ -154,8 +155,9 @@ fun FancyfinApp() {
                 // Keyed so opening another title from this one (More like this, franchise) starts a fresh page
                 // instead of reusing the old page's state.
                 is Route.Title -> androidx.compose.runtime.key(route.ref) {
-                    TitleScreen(route.ref, client, play, openTitle, showTrailer) { p -> stack.add(Route.Person(PersonRef(p.id, p.name, p.photo))) }
+                    TitleScreen(route.ref, client, play, openTitle, showTrailer, { p -> stack.add(Route.Person(PersonRef(p.id, p.name, p.photo))) }, { stack.add(Route.Edit(it)) })
                 }
+                is Route.Edit -> EditScreen(route.item, client)
                 is Route.Person -> androidx.compose.runtime.key(route.ref) { PersonScreen(route.ref, client, openTitle) }
                 is Route.Play -> androidx.compose.runtime.key(route.item.id) {
                     PlayerScreen(route.item, client, route.sourceId, route.maxHeight, back) { next ->

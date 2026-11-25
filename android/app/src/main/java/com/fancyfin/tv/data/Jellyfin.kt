@@ -909,6 +909,72 @@ class JellyfinClient(private val prefs: Prefs) {
         send("/Items/$itemId/RemoteSearch/Subtitles/" + java.net.URLEncoder.encode(subtitleId, "UTF-8").replace("+", "%20"))
     }
 
+    // ---- Library editing (advanced mode) -----------------------------------------------------
+
+    /** One picture a metadata provider (TMDb and so on) has on offer for a title. */
+    class RemoteImg(val url: String, val thumb: String?, val provider: String, val language: String?, val width: Int, val height: Int, val rating: Double?)
+
+    private fun enc(v: String) = java.net.URLEncoder.encode(v, "UTF-8").replace("+", "%20")
+
+    suspend fun remoteImages(itemId: String, type: String, allLanguages: Boolean): List<RemoteImg> {
+        val text = get("/Items/$itemId/RemoteImages?type=$type&limit=60&includeAllLanguages=$allLanguages")
+        val arr = JSONObject(text).optJSONArray("Images") ?: return emptyList()
+        val out = ArrayList<RemoteImg>()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val url = o.optString("Url")
+            if (url.isEmpty()) continue
+            out.add(
+                RemoteImg(
+                    url, o.optString("ThumbnailUrl").takeIf { it.isNotEmpty() && it != "null" }, o.optString("ProviderName"), o.optString("Language").takeIf { it.isNotEmpty() && it != "null" },
+                    o.optInt("Width"), o.optInt("Height"),
+                    if (o.has("CommunityRating") && !o.isNull("CommunityRating")) o.optDouble("CommunityRating") else null,
+                ),
+            )
+        }
+        return out
+    }
+
+    /** Has the server download that picture and use it for the title. */
+    suspend fun useRemoteImage(itemId: String, type: String, image: RemoteImg) {
+        send("/Items/$itemId/RemoteImages/Download?type=$type&imageUrl=${enc(image.url)}" + if (image.provider.isNotEmpty()) "&providerName=${enc(image.provider)}" else "")
+    }
+
+    /** A possible match from the metadata providers. [json] is passed back to the server when you pick it. */
+    class MatchResult(val json: JSONObject, val name: String, val year: Int?, val overview: String?, val image: String?, val provider: String, val ids: String)
+
+    suspend fun matchSearch(item: Item, name: String, year: Int?): List<MatchResult> = withContext(Dispatchers.IO) {
+        val info = JSONObject().put("Name", name)
+        if (year != null) info.put("Year", year)
+        val body = JSONObject().put("ItemId", item.id).put("SearchInfo", info)
+        val kind = if (item.isSeries) "Series" else "Movie"
+        val arr = JSONArray(request(server, "/Items/RemoteSearch/$kind", "POST", body))
+        val out = ArrayList<MatchResult>()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val ids = o.optJSONObject("ProviderIds")
+            val idText = ids?.keys()?.asSequence()?.map { k -> "$k ${ids.optString(k)}" }?.joinToString("  ·  ") ?: ""
+            out.add(
+                MatchResult(
+                    o, o.optString("Name"), if (o.has("ProductionYear") && !o.isNull("ProductionYear")) o.optInt("ProductionYear") else null,
+                    o.optString("Overview").takeIf { it.isNotEmpty() && it != "null" },
+                    o.optString("ImageUrl").takeIf { it.isNotEmpty() && it != "null" },
+                    o.optString("SearchProviderName"), idText,
+                ),
+            )
+        }
+        out
+    }
+
+    suspend fun applyMatch(itemId: String, result: MatchResult, replaceImages: Boolean) {
+        send("/Items/RemoteSearch/Apply/$itemId?ReplaceAllImages=$replaceImages", body = result.json)
+    }
+
+    /** Re-reads the title's metadata and pictures. [replaceAll] overwrites what is there, including your own picks. */
+    suspend fun refreshItem(itemId: String, replaceAll: Boolean) {
+        send("/Items/$itemId/Refresh?MetadataRefreshMode=FullRefresh&ImageRefreshMode=FullRefresh&ReplaceAllMetadata=$replaceAll&ReplaceAllImages=$replaceAll")
+    }
+
     suspend fun previousEpisode(item: Item): Item? {
         val seriesId = item.seriesId ?: return null
         val all = items(get("/Shows/$seriesId/Episodes?UserId=$userId&Fields=$fields"))

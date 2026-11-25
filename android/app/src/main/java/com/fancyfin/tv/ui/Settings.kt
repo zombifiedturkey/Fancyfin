@@ -91,6 +91,9 @@ object UiSettings {
         private set
     var background by mutableStateOf(BackgroundChoice.Midnight)
         private set
+    /** Switches on the library-editing tools (an Edit button on every title and so on). */
+    var advanced by mutableStateOf(false)
+        private set
     /** Preferred audio language code for playback ("" = whatever the file says first). */
     var audioLang by mutableStateOf("")
         private set
@@ -118,6 +121,7 @@ object UiSettings {
         glass = Glass.values().firstOrNull { it.name == p.getString("ui_glass", null) } ?: Glass.Balanced
         accent = AccentChoice.values().firstOrNull { it.name == p.getString("ui_accent", null) } ?: AccentChoice.Teal
         backgroundPicture = p.getBoolean("ui_bg_picture", true)
+        advanced = p.getBoolean("ui_advanced", false)
         background = BackgroundChoice.values().firstOrNull { it.name == p.getString("ui_bg_colour", null) } ?: BackgroundChoice.Midnight
         askArr = p.getBoolean("ui_ask_arr", true)
         audioLang = p.getString("pl_audio", "") ?: ""
@@ -185,6 +189,11 @@ object UiSettings {
         prefs?.edit()?.putString("ui_accent", value.name)?.apply()
     }
 
+    fun chooseAdvanced(value: Boolean) {
+        advanced = value
+        prefs?.edit()?.putBoolean("ui_advanced", value)?.apply()
+    }
+
     fun chooseBackground(value: BackgroundChoice) {
         background = value
         prefs?.edit()?.putString("ui_bg_colour", value.name)?.apply()
@@ -229,6 +238,11 @@ fun SettingsScreen(client: com.fancyfin.tv.data.JellyfinClient, onTab: (Tab) -> 
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
                 Text("Settings", color = Palette.Text, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+
+                SettingRow("Advanced mode  —  library editing tools (change pictures, fix match and more)") {
+                    GlassButton("On", { UiSettings.chooseAdvanced(true) }, primary = UiSettings.advanced)
+                    GlassButton("Off", { UiSettings.chooseAdvanced(false) }, primary = !UiSettings.advanced)
+                }
 
                 SettingRow("Window corners") {
                     Corner.values().forEach { c ->

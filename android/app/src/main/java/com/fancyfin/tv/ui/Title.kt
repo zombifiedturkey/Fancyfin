@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Text
@@ -139,6 +140,7 @@ fun TitleScreen(
     onOpen: (TitleRef) -> Unit,
     onTrailer: (List<String>) -> Unit,
     onPerson: (Person) -> Unit,
+    onEdit: (Item) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     var item by remember { mutableStateOf(ref.server) }
@@ -389,6 +391,9 @@ fun TitleScreen(
                                         }
                                     },
                                 )
+                                if (UiSettings.advanced) {
+                                    IconCircleButton(icon = Icons.Filled.Edit, on = false, onClick = { onEdit(shown) })
+                                }
                             }
                         }
                         Box(Modifier.weight(1f))
