@@ -800,10 +800,10 @@ private fun PosterCard(
 /** How solid a poster is: the one you're on is fully solid, and each step away (either side) fades more. */
 private fun posterAlpha(distance: Int): Float = when (distance) {
     0 -> 1f
-    1 -> 0.85f
-    2 -> 0.65f
-    3 -> 0.45f
-    else -> 0.25f
+    1 -> 0.9f
+    2 -> 0.78f
+    3 -> 0.64f
+    else -> 0.5f
 }
 
 /** The strip of genres under the posters. Moving along it swaps the posters; OK jumps up to them; holding OK offers to pin. */
