@@ -731,6 +731,7 @@ private val SUB_LANGS = listOf(
     "por" to "Portuguese", "nld" to "Dutch", "jpn" to "Japanese", "kor" to "Korean", "zho" to "Chinese",
 )
 
+@OptIn(ExperimentalComposeUiApi::class)
 /** Looks for subtitles on the sources your Jellyfin server has set up (such as OpenSubtitles) and saves the one you pick. */
 @Composable
 private fun SubtitleSearch(client: JellyfinClient, item: Item, onAdded: () -> Unit, onClose: () -> Unit) {
