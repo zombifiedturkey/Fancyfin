@@ -884,6 +884,31 @@ class JellyfinClient(private val prefs: Prefs) {
         return if (at >= 0 && at + 1 < all.size) all[at + 1] else null
     }
 
+    /** One subtitle offered by an online source the server is set up with (OpenSubtitles and similar). */
+    class RemoteSub(val id: String, val name: String, val provider: String, val format: String, val rating: Double?, val downloads: Int, val hashMatch: Boolean)
+
+    /** Searches the server's subtitle sources. Throws when the server has none set up. */
+    suspend fun searchSubtitles(itemId: String, language: String): List<RemoteSub> {
+        val arr = JSONArray(get("/Items/$itemId/RemoteSearch/Subtitles/$language"))
+        val out = ArrayList<RemoteSub>()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            out.add(
+                RemoteSub(
+                    o.optString("Id"), o.optString("Name"), o.optString("ProviderName"), o.optString("Format"),
+                    if (o.has("CommunityRating") && !o.isNull("CommunityRating")) o.optDouble("CommunityRating") else null,
+                    o.optInt("DownloadCount"), o.optBoolean("IsHashMatch"),
+                ),
+            )
+        }
+        return out.sortedWith(compareByDescending<RemoteSub> { it.hashMatch }.thenByDescending { it.downloads })
+    }
+
+    /** Has the server download that subtitle and save it next to the video. */
+    suspend fun downloadSubtitle(itemId: String, subtitleId: String) {
+        send("/Items/$itemId/RemoteSearch/Subtitles/" + java.net.URLEncoder.encode(subtitleId, "UTF-8").replace("+", "%20"))
+    }
+
     suspend fun previousEpisode(item: Item): Item? {
         val seriesId = item.seriesId ?: return null
         val all = items(get("/Shows/$seriesId/Episodes?UserId=$userId&Fields=$fields"))

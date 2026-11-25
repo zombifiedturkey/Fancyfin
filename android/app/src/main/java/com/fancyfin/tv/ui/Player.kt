@@ -29,6 +29,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.rememberUpdatedState
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -187,7 +189,7 @@ private fun Thumbnail(url: String, tileW: Int, tileH: Int, col: Int, row: Int, w
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun TrackMenu(player: ExoPlayer, tick: Int, prevEp: Item?, nextEp: Item?, onEpisode: (Item) -> Unit, onClose: () -> Unit) {
+private fun TrackMenu(player: ExoPlayer, tick: Int, prevEp: Item?, nextEp: Item?, onEpisode: (Item) -> Unit, onFindSubtitles: () -> Unit, onClose: () -> Unit) {
     BackHandler { onClose() }
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) {
@@ -267,6 +269,7 @@ private fun TrackMenu(player: ExoPlayer, tick: Int, prevEp: Item?, nextEp: Item?
                 }
             }
             column("AUDIO", audio, lead = true)
+            text.add(Entry("＋ Find subtitles online…", false) { onFindSubtitles() })
             column("SUBTITLES", text, lead = audio.isEmpty())
             val episodes = ArrayList<Entry>()
             prevEp?.let { e -> episodes.add(Entry("◀ Previous: " + listOfNotNull(e.episodeLabel, e.name).joinToString(" · "), false) { onEpisode(e) }) }
@@ -295,6 +298,8 @@ fun PlayerScreen(item: Item, client: JellyfinClient, sourceId: String?, maxHeigh
     LaunchedEffect(item.id) {
         if (item.isEpisode) nextEp = try { client.nextEpisode(item) } catch (e: Exception) { null }
     }
+    var resumeMs by remember(item.id) { mutableStateOf<Long?>(null) }
+    val scope = rememberCoroutineScope()
     val loaded = media
     if (loaded == null) {
         BackHandler { onDone() }
@@ -302,7 +307,13 @@ fun PlayerScreen(item: Item, client: JellyfinClient, sourceId: String?, maxHeigh
             Text("Loading…", color = Palette.TextMuted, fontSize = 14.sp)
         }
     } else {
-        PlayerBody(item, client, sourceId, maxHeight, loaded, nextEp, prevEp, onDone, onNext)
+        PlayerBody(item, client, sourceId, maxHeight, loaded, nextEp, prevEp, resumeMs, onDone, onNext) { at ->
+            // A subtitle was just added: re-read the video's tracks and restart where you were.
+            scope.launch {
+                val fresh = try { client.mediaInfo(item.id, sourceId) } catch (e: Exception) { null }
+                if (fresh != null) { resumeMs = at; media = fresh }
+            }
+        }
     }
 }
 
@@ -316,17 +327,20 @@ private fun PlayerBody(
     media: MediaInfo,
     nextEp: Item?,
     prevEp: Item?,
+    resumeMs: Long?,
     onDone: () -> Unit,
     onNext: (Item) -> Unit,
+    onSubtitleAdded: (Long) -> Unit,
 ) {
     val context = LocalContext.current
-    val startMs = if (item.played) 0L else item.positionTicks / TICKS_PER_MS
+    val startMs = resumeMs ?: if (item.played) 0L else item.positionTicks / TICKS_PER_MS
     var info by remember { mutableStateOf("") }
     var note by remember { mutableStateOf<String?>(if (maxHeight != null) "Playing at up to ${maxHeight}p (your quality limit in Settings)." else null) }
     var showInfo by remember { mutableStateOf(false) }
     var controls by remember { mutableStateOf(true) }
     var interaction by remember { mutableStateOf(0) }
     var menuOpen by remember { mutableStateOf(false) }
+    var subSearch by remember { mutableStateOf(false) }
     var position by remember { mutableStateOf(startMs) }
     var duration by remember { mutableStateOf(item.runtimeTicks / TICKS_PER_MS) }
     var buffered by remember { mutableStateOf(0L) }
@@ -339,7 +353,7 @@ private fun PlayerBody(
     val nextRef = rememberUpdatedState(nextEp)
     val dismissedRef = rememberUpdatedState(nextDismissed)
 
-    val player = remember(item.id) {
+    val player = remember(item.id, media) {
         // Audio passthrough to the TV or receiver is automatic; the decoder fallback lets a second-choice
         // decoder take over when the first one refuses a stream.
         val factory = DefaultRenderersFactory(context).setEnableDecoderFallback(true)
@@ -706,6 +720,97 @@ private fun PlayerBody(
             }
         }
 
-        if (menuOpen) TrackMenu(player, tracksTick, prevEp, nextEp, { onNext(it) }) { menuOpen = false }
+        if (menuOpen) TrackMenu(player, tracksTick, prevEp, nextEp, { onNext(it) }, { menuOpen = false; subSearch = true }) { menuOpen = false }
+        if (subSearch) SubtitleSearch(client, item, onAdded = { subSearch = false; onSubtitleAdded(player.currentPosition) }) { subSearch = false }
+    }
+}
+
+
+private val SUB_LANGS = listOf(
+    "eng" to "English", "spa" to "Spanish", "fra" to "French", "deu" to "German", "ita" to "Italian",
+    "por" to "Portuguese", "nld" to "Dutch", "jpn" to "Japanese", "kor" to "Korean", "zho" to "Chinese",
+)
+
+/** Looks for subtitles on the sources your Jellyfin server has set up (such as OpenSubtitles) and saves the one you pick. */
+@Composable
+private fun SubtitleSearch(client: JellyfinClient, item: Item, onAdded: () -> Unit, onClose: () -> Unit) {
+    BackHandler { onClose() }
+    var lang by remember { mutableStateOf(SUB_LANGS.indexOfFirst { it.first == UiSettings.subLang }.coerceAtLeast(0)) }
+    var results by remember { mutableStateOf<List<JellyfinClient.RemoteSub>?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val first = remember { FocusRequester() }
+    LaunchedEffect(lang) {
+        results = null
+        error = null
+        try {
+            val found = client.searchSubtitles(item.id, SUB_LANGS[lang].first)
+            results = found
+            if (found.isEmpty()) error = "No subtitles found in ${SUB_LANGS[lang].second}."
+        } catch (e: Exception) {
+            results = emptyList()
+            error = "Couldn't search. Your Jellyfin server needs a subtitle source: add the OpenSubtitles plugin under Dashboard > Plugins, then set it up under Dashboard > Libraries > Subtitles."
+        }
+    }
+    LaunchedEffect(Unit) {
+        delay(80)
+        try { first.requestFocus() } catch (e: Exception) { /* not laid out yet */ }
+    }
+    val panel = RoundedCornerShape(UiSettings.corner.tile)
+    Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.CenterEnd) {
+        Column(
+            Modifier
+                .padding(end = 40.dp)
+                .width(420.dp)
+                .background(Color(0xF2121520), panel)
+                .border(1.dp, Palette.GlassEdge, panel)
+                .focusProperties { exit = { FocusRequester.Cancel } }
+                .focusGroup()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("FIND SUBTITLES", color = Palette.TextMuted, fontSize = 11.sp, letterSpacing = 1.2.sp, fontWeight = FontWeight.SemiBold)
+            GlassButton("Language: ${SUB_LANGS[lang].second}  ▸", { lang = (lang + 1) % SUB_LANGS.size }, Modifier.focusRequester(first))
+            val list = results
+            when {
+                busy != null -> Text(busy!!, color = Palette.Text, fontSize = 12.sp)
+                list == null -> Text("Searching…", color = Palette.TextMuted, fontSize = 12.sp)
+                error != null -> Text(error!!, color = Palette.TextMuted, fontSize = 12.sp)
+                else -> Column(Modifier.height(240.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for (r in list.take(30)) {
+                        FocusBox(
+                            onClick = {
+                                busy = "Downloading…"
+                                scope.launch {
+                                    try {
+                                        client.downloadSubtitle(item.id, r.id)
+                                        onAdded()
+                                    } catch (e: Exception) {
+                                        busy = null
+                                        error = "That one couldn't be downloaded. Try another."
+                                        results = list
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(UiSettings.corner.button.coerceAtLeast(6.dp)),
+                            focusedScale = 1.03f,
+                            edge = false,
+                        ) { focused ->
+                            Column(
+                                Modifier.fillMaxWidth().background(if (focused) Palette.GlassFillStrong else Palette.GlassFill).padding(horizontal = 12.dp, vertical = 8.dp),
+                            ) {
+                                Text(r.name, color = Palette.Text, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    listOfNotNull(r.provider.ifEmpty { null }, r.format.ifEmpty { null }, if (r.hashMatch) "Exact match" else null, if (r.downloads > 0) "${r.downloads} downloads" else null).joinToString(" · "),
+                                    color = Palette.TextMuted, fontSize = 10.sp,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
