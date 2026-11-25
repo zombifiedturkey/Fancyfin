@@ -85,7 +85,8 @@ fun HeroBackdrop(entry: HeroEntry?) = HeroBackdropUrl(entry?.backdrop ?: entry?.
 
 @Composable
 fun HeroBackdropUrl(url: String?) {
-    if (!UiSettings.backgroundPicture || url == null) {
+    // This page is all about the big picture, so it shows whatever the Settings background choice is.
+    if (url == null) {
         Backdrop(null)
         return
     }
@@ -98,9 +99,10 @@ fun HeroBackdropUrl(url: String?) {
         Box(
             Modifier.fillMaxSize().background(
                 Brush.horizontalGradient(
-                    0f to ambient.copy(alpha = 0.96f),
-                    0.4f to ambient.copy(alpha = 0.80f),
-                    0.78f to ambient.copy(alpha = 0.16f),
+                    0f to ambient.copy(alpha = 0.94f),
+                    0.28f to ambient.copy(alpha = 0.76f),
+                    0.55f to ambient.copy(alpha = 0.18f),
+                    0.78f to Color.Transparent,
                     1f to Color.Transparent,
                 ),
             ),
@@ -109,8 +111,8 @@ fun HeroBackdropUrl(url: String?) {
         Box(
             Modifier.fillMaxSize().background(
                 Brush.verticalGradient(
-                    0.4f to Color.Transparent,
-                    1f to androidx.compose.ui.graphics.lerp(Color.Black, ambient, 0.3f).copy(alpha = 0.9f),
+                    0.62f to Color.Transparent,
+                    1f to androidx.compose.ui.graphics.lerp(Color.Black, ambient, 0.3f).copy(alpha = 0.92f),
                 ),
             ),
         )

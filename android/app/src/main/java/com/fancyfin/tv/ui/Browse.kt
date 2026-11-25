@@ -135,9 +135,9 @@ class GridSpec(
 )
 
 /** How tall the details at the top of a browse page are; the rows start below it. */
-private val INFO_HEIGHT = 236.dp
-private val POSTER_W = 108.dp
-private val POSTER_H = 162.dp
+private val INFO_HEIGHT = 250.dp
+private val POSTER_W = 128.dp
+private val POSTER_H = 192.dp
 
 private val POPULAR_GENRES = listOf(
     "Action", "Comedy", "Drama", "Science Fiction", "Sci-Fi & Fantasy", "Thriller", "Horror", "Animation",
@@ -290,13 +290,13 @@ fun FeatureList(
             Modifier.fillMaxSize().padding(top = INFO_HEIGHT),
             state = columnState,
             contentPadding = PaddingValues(top = 0.dp, bottom = 300.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             itemsIndexed(sections) { si, section ->
                 Column {
                     Text(
                         section.title, color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(start = 20.dp, bottom = 8.dp),
+                        modifier = Modifier.padding(start = 20.dp, bottom = 6.dp),
                     )
                     HeroRow(
                         entries = section.entries,
@@ -637,7 +637,7 @@ private fun HeroRow(
                 .focusGroup(),
             state = listState,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
         ) {
             itemsIndexed(entries) { index, entry ->
                 val requester = remember { FocusRequester() }
