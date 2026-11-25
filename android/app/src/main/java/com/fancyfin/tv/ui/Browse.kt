@@ -2,6 +2,9 @@ package com.fancyfin.tv.ui
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.draw.scale
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.graphics.graphicsLayer
@@ -279,7 +282,10 @@ fun FeatureList(
     val rowStates = state.rowStates
     val requesters = remember { HashMap<Int, HashMap<Int, FocusRequester>>() }
 
-    LaunchedEffect(focusRow) { columnState.animateScrollToItem(focusRow) }
+    val base = sections.size
+    LaunchedEffect(focusRow) { if (grid != null && focusRow >= base) columnState.animateScrollToItem(focusRow - base) }
+    val gridFirst = remember { FocusRequester() }
+    val genreIdx = sections.indexOfFirst { it.genreList.isNotEmpty() }
 
     // The genre picker: moving along the strip swaps the posters (loaded once, then kept).
     val genreNames = sections.firstOrNull { it.genreList.isNotEmpty() }?.genreList ?: emptyList()
@@ -315,18 +321,65 @@ fun FeatureList(
         if (e.backdrop?.contains("image.tmdb.org") == true) smallTmdb(e.backdrop)
         else e.onServer?.let { client.backdrop(it, 96) } ?: smallTmdb(e.backdrop)
 
+    fun goRow(n: Int) {
+        focusRow = n
+        scope.launch {
+            val sel = selected[n] ?: 0
+            rowStates.getOrPut(n) { LazyListState() }.scrollToItem((sel - 1).coerceAtLeast(0))
+            androidx.compose.runtime.withFrameNanos { }
+            androidx.compose.runtime.withFrameNanos { }
+            try { requesters[n]?.get(sel)?.requestFocus() } catch (e: Exception) { /* not laid out yet */ }
+        }
+    }
+    fun goGrid() {
+        focusRow = sections.size
+        scope.launch {
+            columnState.scrollToItem(0)
+            androidx.compose.runtime.withFrameNanos { }
+            androidx.compose.runtime.withFrameNanos { }
+            try { gridFirst.requestFocus() } catch (e: Exception) { /* not laid out yet */ }
+        }
+    }
+
     CompositionLocalProvider(LocalBringIntoViewSpec provides NoAutoScroll) {
       BoxWithConstraints(modifier.fillMaxSize().onFocusChanged { listFocused = it.hasFocus }) {
         val inGrid = grid != null && focusRow >= sections.size
         val viewH by androidx.compose.animation.core.animateDpAsState(if (inGrid) GRID_VIEW_H else ROW_VIEW_H, label = "rowWindow")
         InfoBlock(state.focused, client, Modifier.align(Alignment.TopStart).height((maxHeight - viewH).coerceAtLeast(120.dp)))
-        LazyColumn(
-            Modifier.align(Alignment.BottomStart).fillMaxWidth().height(viewH),
-            state = columnState,
-            contentPadding = PaddingValues(top = VIEW_HEADROOM, bottom = GRID_VIEW_H),
-            verticalArrangement = Arrangement.spacedBy(0.dp),
+        // Only one row is ever on show: moving to another row fades it in place of the last one (no sliding, so
+        // nothing gets cut off). Rows that aren't on show are parked out of the way so the remote can't land on them.
+        Box(
+            Modifier.align(Alignment.BottomStart).fillMaxWidth().height(viewH).clipToBounds()
+                .onPreviewKeyEvent { ev ->
+                    if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    val last = sections.size - 1
+                    when (ev.key) {
+                        Key.DirectionDown -> when {
+                            inGrid -> false
+                            focusRow == genreIdx && !stripFocused -> false
+                            focusRow < last -> { goRow(focusRow + 1); true }
+                            grid != null -> { goGrid(); true }
+                            else -> true
+                        }
+                        Key.DirectionUp -> when {
+                            inGrid -> if (focusRow == base) { goRow(last); true } else false
+                            focusRow == genreIdx && stripFocused -> false
+                            focusRow > 0 -> { goRow(focusRow - 1); true }
+                            else -> true
+                        }
+                        else -> false
+                    }
+                },
         ) {
-            itemsIndexed(sections) { si, section ->
+            sections.forEachIndexed { si, section ->
+                val current = !inGrid && si == focusRow
+                val shown by animateFloatAsState(if (current) 1f else 0f, tween(260), label = "rowFade")
+                Box(
+                    Modifier.fillMaxSize()
+                        .offset(y = if (current || shown > 0.01f) 0.dp else (-4000).dp)
+                        .graphicsLayer { alpha = shown },
+                    contentAlignment = Alignment.BottomStart,
+                ) {
                 val isGenre = section.genreList.isNotEmpty()
                 val genreName: String = if (isGenre) section.genreList.getOrNull(genreSel) ?: "" else ""
                 val entries = if (isGenre) state.genreEntries[genreName] ?: emptyList() else section.entries
@@ -379,10 +432,18 @@ fun FeatureList(
                     }
                 }
                 }
+                }
             }
 
             if (grid != null) {
-                val base = sections.size
+              val gridShown by animateFloatAsState(if (inGrid) 1f else 0f, tween(260), label = "gridFade")
+              LazyColumn(
+                Modifier.fillMaxSize()
+                    .offset(y = if (inGrid || gridShown > 0.01f) 0.dp else 4000.dp)
+                    .graphicsLayer { alpha = gridShown },
+                state = columnState,
+                contentPadding = PaddingValues(top = VIEW_HEADROOM, bottom = GRID_VIEW_H),
+              ) {
                 item {
                     Column(Modifier.padding(bottom = 8.dp)) {
                         Text(
@@ -391,7 +452,11 @@ fun FeatureList(
                         )
                         Row(Modifier.padding(start = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             grid.labels.forEachIndexed { i, label ->
-                                GlassButton(label, { grid.onSelect(i) }, primary = i == grid.selected, clear = true, onFocused = { focusRow = base })
+                                GlassButton(
+                                    label, { grid.onSelect(i) },
+                                    modifier = if (i == grid.selected) Modifier.focusRequester(gridFirst) else Modifier,
+                                    primary = i == grid.selected, clear = true, onFocused = { focusRow = base },
+                                )
                             }
                         }
                     }
@@ -411,6 +476,7 @@ fun FeatureList(
                         }
                     }
                 }
+              }
             }
         }
         pinGenre?.let { g ->
