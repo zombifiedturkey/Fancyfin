@@ -439,11 +439,25 @@ fun BrowseScreen(
     var failed by state::failed
     var wallpaper by state::wallpaper
     var message by remember(tab) { mutableStateOf<String?>(null) }
+    var allItems by state::allItems
+    var sortIndex by state::sortIndex
 
     val types = when (tab) {
         Tab.Movies -> "Movie"
         Tab.Shows -> "Series"
         else -> "Movie,Series"
+    }
+
+    // Movies and TV Shows end with every title on your server as a grid you can sort.
+    val gridSorts = listOf(Triple("A–Z", "SortName", false), Triple("Recently added", "DateCreated", true), Triple("Release year", "PremiereDate", true), Triple("Rating", "CommunityRating", true))
+    LaunchedEffect(tab, sortIndex) {
+        if (tab == Tab.Home) return@LaunchedEffect
+        try {
+            val (_, by, desc) = gridSorts[sortIndex.coerceIn(0, gridSorts.size - 1)]
+            allItems = client.library(types, by, desc)
+        } catch (e: Exception) {
+            // The rows above still work.
+        }
     }
 
     LaunchedEffect(tab) {
@@ -524,7 +538,7 @@ fun BrowseScreen(
                         state = state,
                         client = client,
                         sections = sections,
-                        grid = null,
+                        grid = if (tab == Tab.Home) null else GridSpec(allItems, gridSorts.map { it.first }, sortIndex) { sortIndex = it },
                         onWallpaper = { wallpaper = it },
                         onPlay = { e -> onTitle(titleRef(e)) },
                         onDetails = { e -> playEntry(e, scope, client, onPlay, onOpen) { message = it } },
