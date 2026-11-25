@@ -90,8 +90,7 @@ fun HeroBackdropUrl(url: String?) {
         Backdrop(null)
         return
     }
-    val accent = Palette.Accent
-    val deep = androidx.compose.ui.graphics.lerp(Palette.Background, accent, 0.45f)
+    val deep = Palette.Background
     Box(Modifier.fillMaxSize().background(deep)) {
         Crossfade(targetState = url, label = "hero") { target ->
             AsyncImage(model = target, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
