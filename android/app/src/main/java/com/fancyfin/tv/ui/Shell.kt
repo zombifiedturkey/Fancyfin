@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -86,6 +87,7 @@ enum class Tab(val label: String, val section: String, val inMenu: Boolean = tru
     // Still reachable in code, no longer in the menu.
     AllMovies("All movies", "Library", false),
     AllShows("All shows", "Library", false),
+    Attention("Needs attention", "System", false),
     Settings("Settings", "System"),
 }
 
@@ -169,7 +171,7 @@ fun ClockPill(modifier: Modifier = Modifier) {
     }
     Text(
         text, color = Palette.Text, fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
-        modifier = modifier.background(Color(0x59000000), RoundedCornerShape(50)).padding(horizontal = 10.dp, vertical = 4.dp),
+        modifier = modifier.background(Color(0x59000000), RoundedCornerShape(UiSettings.corner.button)).border(1.dp, Palette.GlassEdge, RoundedCornerShape(UiSettings.corner.button)).padding(horizontal = 10.dp, vertical = 4.dp),
     )
 }
 
@@ -234,13 +236,16 @@ fun Shell(
             enter = slideInHorizontally { -it } + fadeIn(),
             exit = slideOutHorizontally { -it } + fadeOut(),
         ) {
-            val panel = RoundedCornerShape(16.dp)
+            val panel = RoundedCornerShape(UiSettings.corner.tile)
             Column(
                 Modifier
                     .padding(start = 10.dp, top = 10.dp, bottom = 10.dp)
                     .width(190.dp)
                     .fillMaxHeight()
-                    .background(Color(0xF50B0B0D), panel)
+                    .clip(panel)
+                    .background(Palette.Panel)
+                    .background(Brush.verticalGradient(0f to Color.White.copy(alpha = 0.09f), 1f to Color.White.copy(alpha = 0.02f)))
+                    .border(1.dp, Palette.GlassEdge, panel)
                     .focusProperties { exit = { FocusRequester.Cancel } }
                     .focusGroup()
                     .onPreviewKeyEvent { event ->
@@ -313,6 +318,9 @@ fun Shell(
                         }
                     }
                     MenuHeading("SYSTEM")
+                    if (UiSettings.advanced) {
+                        MenuItem("Needs attention", current == Tab.Attention, Icons.Filled.Warning, Modifier, { onTab(Tab.Attention) })
+                    }
                     MenuItem("Settings", current == Tab.Settings, tabIcon(Tab.Settings), Modifier, { onTab(Tab.Settings) })
                 }
                 MenuItem("Sign out", false, null, Modifier, onSignOut)
@@ -391,12 +399,14 @@ private fun EditMenu(target: EditTarget, onClose: () -> Unit) {
         delay(80)
         try { first.requestFocus() } catch (e: Exception) { /* not laid out yet */ }
     }
-    val panel = RoundedCornerShape(16.dp)
+    val panel = RoundedCornerShape(UiSettings.corner.tile)
     Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
         Column(
             Modifier
                 .width(250.dp)
-                .background(Color(0xF50B0B0D), panel)
+                .clip(panel)
+                .background(Palette.Panel)
+                .border(1.dp, Palette.GlassEdge, panel)
                 .focusProperties { exit = { FocusRequester.Cancel } }
                 .focusGroup()
                 .padding(18.dp),

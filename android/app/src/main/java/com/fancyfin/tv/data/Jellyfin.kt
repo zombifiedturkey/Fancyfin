@@ -975,6 +975,40 @@ class JellyfinClient(private val prefs: Prefs) {
         send("/Items/$itemId/Refresh?MetadataRefreshMode=FullRefresh&ImageRefreshMode=FullRefresh&ReplaceAllMetadata=$replaceAll&ReplaceAllImages=$replaceAll")
     }
 
+    suspend fun fullItem(id: String): JSONObject = JSONObject(get("/Users/$userId/Items/$id"))
+
+    /** Saves a whole item record back (changed name, description, genres and so on). */
+    suspend fun saveItem(id: String, json: JSONObject) = send("/Items/$id", body = json)
+
+    /** Removes the title from the server, and its files from disk if Jellyfin is allowed to. */
+    suspend fun deleteItem(id: String) = send("/Items/$id", "DELETE")
+
+    suspend fun mergeVersions(ids: List<String>) = send("/Videos/MergeVersions?Ids=${ids.joinToString(",")}")
+
+    suspend fun splitVersions(id: String) = send("/Videos/$id/AlternateSources", "DELETE")
+
+    suspend fun scanLibraries() = send("/Library/Refresh")
+
+    class ServerTask(val id: String, val name: String, val state: String, val progress: Double?, val category: String, val lastResult: String?)
+
+    suspend fun tasks(): List<ServerTask> {
+        val arr = JSONArray(get("/ScheduledTasks?isHidden=false"))
+        val out = ArrayList<ServerTask>()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            out.add(
+                ServerTask(
+                    o.optString("Id"), o.optString("Name"), o.optString("State"),
+                    if (o.has("CurrentProgressPercentage") && !o.isNull("CurrentProgressPercentage")) o.optDouble("CurrentProgressPercentage") else null,
+                    o.optString("Category"), o.optJSONObject("LastExecutionResult")?.optString("Status"),
+                ),
+            )
+        }
+        return out
+    }
+
+    suspend fun runTask(id: String) = send("/ScheduledTasks/Running/$id")
+
     suspend fun previousEpisode(item: Item): Item? {
         val seriesId = item.seriesId ?: return null
         val all = items(get("/Shows/$seriesId/Episodes?UserId=$userId&Fields=$fields"))

@@ -146,6 +146,7 @@ fun FancyfinApp() {
                     Tab.Search -> SearchScreen(searchState, client, open, goTab, signOut)
                     Tab.Collections -> CollectionsScreen(client, collections, { stack.add(Route.Collection(it)) }, goTab, signOut)
                     Tab.Settings -> SettingsScreen(client, goTab, signOut)
+                    Tab.Attention -> AttentionScreen(client, { stack.add(Route.Edit(it)) }, goTab, signOut)
                     Tab.AllMovies, Tab.AllShows -> LibraryScreen(route.tab, client, open, goTab, signOut)
                 }
                 is Route.Genre -> GenreScreen(route.genre, route.types, screens.getOrPut("genre:${route.genre}:${route.types}") { FeatureState() }, client, open, play, openTitle, goTab, signOut)
@@ -157,7 +158,12 @@ fun FancyfinApp() {
                 is Route.Title -> androidx.compose.runtime.key(route.ref) {
                     TitleScreen(route.ref, client, play, openTitle, showTrailer, { p -> stack.add(Route.Person(PersonRef(p.id, p.name, p.photo))) }, { stack.add(Route.Edit(it)) })
                 }
-                is Route.Edit -> EditScreen(route.item, client)
+                is Route.Edit -> EditScreen(route.item, client) {
+                    // The title was deleted: leave the edit page, and the title page for it too.
+                    stack.removeAt(stack.lastIndex)
+                    val top = stack.lastOrNull()
+                    if (top is Route.Title && top.ref.server?.id == route.item.id && stack.size > 1) stack.removeAt(stack.lastIndex)
+                }
                 is Route.Person -> androidx.compose.runtime.key(route.ref) { PersonScreen(route.ref, client, openTitle) }
                 is Route.Play -> androidx.compose.runtime.key(route.item.id) {
                     PlayerScreen(route.item, client, route.sourceId, route.maxHeight, back) { next ->

@@ -11,5 +11,7 @@ object Palette {
     val GlassFill: Color get() = Color.White.copy(alpha = UiSettings.glass.fill)
     val GlassFillStrong: Color get() = Color.White.copy(alpha = UiSettings.glass.strong)
     val GlassEdge = Color(0x40FFFFFF)
+    /** The big floating panels (side menu, dialogs): dark glass that follows the glass strength. */
+    val Panel: Color get() = Palette.Background.copy(alpha = UiSettings.glass.panel)
     val Scrim = Color(0xE6000000)
 }

@@ -81,7 +81,7 @@ fun ArrDialog(
         Column(
             Modifier
                 .width(640.dp)
-                .background(Color(0xF2121520), panel)
+                .background(Palette.Panel, panel)
                 .border(1.dp, Palette.GlassEdge, panel)
                 .focusProperties { exit = { FocusRequester.Cancel } }
                 .focusGroup()

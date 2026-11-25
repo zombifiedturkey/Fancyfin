@@ -234,7 +234,7 @@ private fun TrackMenu(player: ExoPlayer, tick: Int, prevEp: Item?, nextEp: Item?
         Row(
             Modifier
                 .padding(end = 40.dp)
-                .background(Color(0xF2121520), panel)
+                .background(Palette.Panel, panel)
                 .border(1.dp, Palette.GlassEdge, panel)
                 .focusProperties { exit = { FocusRequester.Cancel } }
                 .focusGroup()
@@ -765,7 +765,7 @@ private fun SubtitleSearch(client: JellyfinClient, item: Item, onAdded: () -> Un
             Modifier
                 .padding(end = 40.dp)
                 .width(420.dp)
-                .background(Color(0xF2121520), panel)
+                .background(Palette.Panel, panel)
                 .border(1.dp, Palette.GlassEdge, panel)
                 .focusProperties { exit = { FocusRequester.Cancel } }
                 .focusGroup()

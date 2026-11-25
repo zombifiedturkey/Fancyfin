@@ -946,12 +946,12 @@ private fun GenrePicker(genres: List<String>, current: String?, allowAll: Boolea
     }
     val options: List<String?> = if (allowAll) listOf<String?>(null) + genres else genres
     val lead = options.indexOf(current).coerceAtLeast(0)
-    val panel = RoundedCornerShape(16.dp)
+    val panel = RoundedCornerShape(UiSettings.corner.tile)
     Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
         Column(
             Modifier
                 .width(560.dp)
-                .background(Color(0xF50B0B0D), panel)
+                .background(Palette.Panel, panel)
                 .focusProperties { exit = { FocusRequester.Cancel } }
                 .focusGroup()
                 .padding(18.dp),
@@ -999,12 +999,12 @@ private fun PinDialog(title: String, pinned: Boolean, onToggle: () -> Unit, onCl
         kotlinx.coroutines.delay(80)
         try { first.requestFocus() } catch (e: Exception) { /* not laid out yet */ }
     }
-    val panel = RoundedCornerShape(16.dp)
+    val panel = RoundedCornerShape(UiSettings.corner.tile)
     Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
         Column(
             Modifier
                 .width(250.dp)
-                .background(Color(0xF50B0B0D), panel)
+                .background(Palette.Panel, panel)
                 .focusProperties { exit = { FocusRequester.Cancel } }
                 .focusGroup()
                 .padding(18.dp),
