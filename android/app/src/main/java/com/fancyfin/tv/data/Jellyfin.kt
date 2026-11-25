@@ -938,7 +938,18 @@ class JellyfinClient(private val prefs: Prefs) {
 
     /** Has the server download that picture and use it for the title. */
     suspend fun useRemoteImage(itemId: String, type: String, image: RemoteImg) {
+        suspend fun backdropCount(): Int {
+            val arr = JSONArray(get("/Items/$itemId/Images"))
+            return (0 until arr.length()).count { arr.getJSONObject(it).optString("ImageType") == "Backdrop" }
+        }
+        val before = if (type == "Backdrop") backdropCount() else 0
         send("/Items/$itemId/RemoteImages/Download?type=$type&imageUrl=${enc(image.url)}" + if (image.provider.isNotEmpty()) "&providerName=${enc(image.provider)}" else "")
+        // Jellyfin adds a new background to the end of the list, and the first one is what gets shown.
+        // Move the new one to the front so it takes effect.
+        if (type == "Backdrop") {
+            val after = backdropCount()
+            if (after > before && after > 1) send("/Items/$itemId/Images/Backdrop/${after - 1}/Index?newIndex=0")
+        }
     }
 
     /** A possible match from the metadata providers. [json] is passed back to the server when you pick it. */
