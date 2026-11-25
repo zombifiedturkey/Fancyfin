@@ -154,27 +154,6 @@ private fun Avatar(size: androidx.compose.ui.unit.Dp) {
     }
 }
 
-/** The slim strip of icons that is always at the left edge: you, search, home and the menu. */
-@Composable
-private fun Rail(current: Tab, modifier: Modifier) {
-    Column(
-        modifier.background(Color(0x66000000), RoundedCornerShape(50)).padding(vertical = 10.dp, horizontal = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Avatar(18.dp)
-        listOf(Tab.Search, Tab.Home).forEach { tab ->
-            Box(
-                Modifier.size(20.dp).background(if (tab == current) Color.White.copy(alpha = 0.22f) else Color.Transparent, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) { Icon(tabIcon(tab), null, tint = Palette.Text, modifier = Modifier.size(12.dp)) }
-        }
-        Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.Menu, null, tint = Palette.Text, modifier = Modifier.size(12.dp))
-        }
-    }
-}
-
 /** The time, in a small frosted pill at the top right. */
 @Composable
 fun ClockPill(modifier: Modifier = Modifier) {
@@ -195,8 +174,8 @@ fun ClockPill(modifier: Modifier = Modifier) {
 }
 
 /**
- * Wraps a screen with the side menu. A slim icon rail sits at the left edge; press left at the far left and
- * it opens into a dark menu panel; press right (or Back) and it closes again.
+ * Wraps a screen with the side menu. Press left at the far left and a dark menu panel slides in; press right
+ * (or Back) and it slides away. Hold OK on an entry to edit the menu: move it up or down, or unpin it.
  * The content gets a modifier that lets the shell put focus back on it.
  */
 @OptIn(ExperimentalComposeUiApi::class)
@@ -221,6 +200,14 @@ fun Shell(
         }
     }
     BackHandler(enabled = open) { open = false }
+    var editing by remember { mutableStateOf<EditTarget?>(null) }
+    // Back from the edit menu puts you back on the menu.
+    LaunchedEffect(editing == null) {
+        if (open && editing == null) {
+            delay(80)
+            try { sidebarFocus.requestFocus() } catch (e: Exception) { /* menu not showing */ }
+        }
+    }
 
     Box(
         Modifier.fillMaxSize().onKeyEvent { event ->
@@ -233,9 +220,8 @@ fun Shell(
             }
         },
     ) {
-        content(Modifier.padding(start = 40.dp).focusRequester(contentFocus).focusGroup())
+        content(Modifier.focusRequester(contentFocus).focusGroup())
 
-        Rail(current, Modifier.align(Alignment.CenterStart).padding(start = 8.dp))
         ClockPill(Modifier.align(Alignment.TopEnd).padding(top = 14.dp, end = 20.dp))
 
         // Dim what's behind the menu so the text in it stays easy to read.
@@ -276,36 +262,65 @@ fun Shell(
                     Modifier.weight(1f).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                    var section = ""
-                    Tab.values().filter { it.inMenu }.forEach { tab ->
-                        if (tab.section != section) {
-                            // Your pinned genres and collections sit just before System, with headings only when pinned.
-                            if (tab.section == "System") {
-                                if (Pins.genres.isNotEmpty()) {
-                                    MenuHeading("GENRES")
-                                    Pins.genres.toList().forEach { g -> MenuItem(g.label, false, Icons.Filled.Star, Modifier, { MenuActions.genre(g.genre, g.types) }) }
-                                }
-                                if (Pins.collections.isNotEmpty()) {
-                                    MenuHeading("COLLECTIONS")
-                                    Pins.collections.toList().forEach { c -> MenuItem(c.name, false, Icons.Filled.Star, Modifier, { MenuActions.collection(c.key) }) }
-                                }
-                            }
-                            section = tab.section
-                            if (section != "Browse") MenuHeading(section.uppercase())
-                        }
+                    Pins.tabOrder.toList().forEach { tab ->
                         MenuItem(
                             label = tab.label,
                             selected = tab == current,
                             icon = tabIcon(tab),
                             modifier = if (tab == Tab.Search) Modifier.focusRequester(sidebarFocus) else Modifier,
                             onClick = { onTab(tab) },
+                            onLongClick = {
+                                editing = EditTarget(
+                                    label = tab.label, canUnpin = false,
+                                    canUp = { Pins.tabOrder.indexOf(tab) > 0 },
+                                    canDown = { Pins.tabOrder.indexOf(tab) < Pins.tabOrder.size - 1 },
+                                    up = { Pins.moveTab(tab, -1) }, down = { Pins.moveTab(tab, 1) }, unpin = {},
+                                )
+                            },
                         )
                     }
+                    // Your pinned genres and collections, with headings only when something is pinned.
+                    if (Pins.genres.isNotEmpty()) {
+                        MenuHeading("GENRES")
+                        Pins.genres.toList().forEach { g ->
+                            MenuItem(
+                                g.label, false, Icons.Filled.Star, Modifier, { MenuActions.genre(g.genre, g.types) },
+                                onLongClick = {
+                                    editing = EditTarget(
+                                        label = g.label, canUnpin = true,
+                                        canUp = { Pins.genres.indexOf(g) > 0 },
+                                        canDown = { Pins.genres.indexOf(g) < Pins.genres.size - 1 },
+                                        up = { Pins.moveGenre(g, -1) }, down = { Pins.moveGenre(g, 1) }, unpin = { Pins.removeGenre(g) },
+                                    )
+                                },
+                            )
+                        }
+                    }
+                    if (Pins.collections.isNotEmpty()) {
+                        MenuHeading("COLLECTIONS")
+                        Pins.collections.toList().forEach { c ->
+                            MenuItem(
+                                c.name, false, Icons.Filled.Star, Modifier, { MenuActions.collection(c.key) },
+                                onLongClick = {
+                                    editing = EditTarget(
+                                        label = c.name, canUnpin = true,
+                                        canUp = { Pins.collections.indexOf(c) > 0 },
+                                        canDown = { Pins.collections.indexOf(c) < Pins.collections.size - 1 },
+                                        up = { Pins.moveCollection(c, -1) }, down = { Pins.moveCollection(c, 1) }, unpin = { Pins.removeCollection(c) },
+                                    )
+                                },
+                            )
+                        }
+                    }
+                    MenuHeading("SYSTEM")
+                    MenuItem("Settings", current == Tab.Settings, tabIcon(Tab.Settings), Modifier, { onTab(Tab.Settings) })
                 }
                 MenuItem("Sign out", false, null, Modifier, onSignOut)
                 Box(Modifier.height(10.dp))
             }
         }
+
+        editing?.let { EditMenu(it) { editing = null } }
     }
 }
 
@@ -315,9 +330,17 @@ private fun MenuHeading(text: String) {
 }
 
 @Composable
-private fun MenuItem(label: String, selected: Boolean, icon: ImageVector?, modifier: Modifier, onClick: () -> Unit) {
+private fun MenuItem(
+    label: String,
+    selected: Boolean,
+    icon: ImageVector?,
+    modifier: Modifier,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+) {
     FocusBox(
         onClick = onClick,
+        onLongClick = onLongClick,
         modifier = modifier.fillMaxWidth().height(30.dp),
         shape = RoundedCornerShape(50),
         focusedScale = 1.02f,
@@ -343,6 +366,50 @@ private fun MenuItem(label: String, selected: Boolean, icon: ImageVector?, modif
                     fontWeight = if (selected || focused) FontWeight.SemiBold else FontWeight.Normal,
                 )
             }
+        }
+    }
+}
+
+/** What the edit menu is working on: one entry of the menu and what can be done to it. */
+private class EditTarget(
+    val label: String,
+    val canUnpin: Boolean,
+    val canUp: () -> Boolean,
+    val canDown: () -> Boolean,
+    val up: () -> Unit,
+    val down: () -> Unit,
+    val unpin: () -> Unit,
+)
+
+/** Opens when you hold OK on a menu entry. Stays open while you move it so you can keep nudging it. */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun EditMenu(target: EditTarget, onClose: () -> Unit) {
+    val first = remember { FocusRequester() }
+    BackHandler { onClose() }
+    LaunchedEffect(Unit) {
+        delay(80)
+        try { first.requestFocus() } catch (e: Exception) { /* not laid out yet */ }
+    }
+    val panel = RoundedCornerShape(16.dp)
+    Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
+        Column(
+            Modifier
+                .width(250.dp)
+                .background(Color(0xF50B0B0D), panel)
+                .focusProperties { exit = { FocusRequester.Cancel } }
+                .focusGroup()
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("EDIT MENU", color = Palette.TextMuted, fontSize = 9.sp, letterSpacing = 1.2.sp)
+            Text(target.label, color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 2)
+            GlassButton("Move up", { if (target.canUp()) target.up() }, modifier = Modifier.fillMaxWidth().focusRequester(first), compact = true)
+            GlassButton("Move down", { if (target.canDown()) target.down() }, modifier = Modifier.fillMaxWidth(), compact = true)
+            if (target.canUnpin) {
+                GlassButton("Unpin from menu", { target.unpin(); onClose() }, modifier = Modifier.fillMaxWidth(), compact = true)
+            }
+            GlassButton("Done", onClose, modifier = Modifier.fillMaxWidth(), primary = true, compact = true)
         }
     }
 }

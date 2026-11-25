@@ -119,6 +119,14 @@ fun FancyfinApp() {
                     }
                 }
             }
+            // A Watch Next card from the launcher: play that title.
+            val linked = DeepLink.itemId
+            androidx.compose.runtime.LaunchedEffect(linked) {
+                if (linked != null) {
+                    DeepLink.itemId = null
+                    try { play(client.item(linked)) } catch (e: Exception) { /* leave the app where it is */ }
+                }
+            }
             MenuActions.genre = { genre, types ->
                 stack.clear()
                 stack.add(Route.Main(Tab.Home))

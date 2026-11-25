@@ -4,6 +4,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -110,6 +113,9 @@ class FeatureState {
     /** False until a full load finishes, and again when something (like playing a title) makes it stale. */
     var loaded = false
     val selected = mutableStateMapOf<Int, Int>()
+    /** The genre picked in the genre strip on Home, and the posters already loaded for each genre. */
+    var genreIndex by mutableStateOf(0)
+    val genreEntries = mutableStateMapOf<String, List<HeroEntry>>()
     var focusRow by mutableStateOf(0)
     var visited = false
     val columnState = LazyListState()
@@ -124,6 +130,8 @@ class HeroSection(
     val genre: String? = null,
     /** OK plays the title (resuming) instead of opening its page. */
     val playDirect: Boolean = false,
+    /** When set, this section is the genre picker: one row of posters whose genre you change from a strip below it. */
+    val genreList: List<String> = emptyList(),
 )
 
 /** The grid of everything at the bottom of a genre page, with its sort buttons. */
@@ -254,6 +262,8 @@ fun FeatureList(
     onMore: (String) -> Unit,
     onOpenItem: (Item) -> Unit,
     onExit: (() -> Unit)?,
+    genreLoader: (suspend (String) -> List<HeroEntry>)? = null,
+    genreTypes: String = "",
 ) {
     val scope = rememberCoroutineScope()
     var listFocused by remember { mutableStateOf(false) }
@@ -264,6 +274,22 @@ fun FeatureList(
     val requesters = remember { HashMap<Int, HashMap<Int, FocusRequester>>() }
 
     LaunchedEffect(focusRow) { columnState.animateScrollToItem(focusRow) }
+
+    // The genre picker: moving along the strip swaps the posters (loaded once, then kept).
+    val genreNames = sections.firstOrNull { it.genreList.isNotEmpty() }?.genreList ?: emptyList()
+    val genreSel = state.genreIndex.coerceIn(0, (genreNames.size - 1).coerceAtLeast(0))
+    val stripRequesters = remember { HashMap<Int, FocusRequester>() }
+    var stripFocused by remember { mutableStateOf(false) }
+    var pinGenre by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(genreSel, genreNames) {
+        val loader = genreLoader ?: return@LaunchedEffect
+        val g = genreNames.getOrNull(genreSel) ?: return@LaunchedEffect
+        if (state.genreEntries[g] == null) {
+            kotlinx.coroutines.delay(200)
+            try { state.genreEntries[g] = loader(g) } catch (e: Exception) { return@LaunchedEffect }
+        }
+        if (stripFocused) state.focused = state.genreEntries[g]?.firstOrNull { !it.isMore }
+    }
 
     // Land on the first tile of the first row when the page opens, or back on the tile you left.
     LaunchedEffect(Unit) {
@@ -293,13 +319,17 @@ fun FeatureList(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             itemsIndexed(sections) { si, section ->
+                val isGenre = section.genreList.isNotEmpty()
+                val genreName = if (isGenre) section.genreList.getOrNull(genreSel) ?: "" else section.genre
+                val entries = if (isGenre) state.genreEntries[genreName] ?: emptyList() else section.entries
                 Column {
                     Text(
-                        section.title, color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                        if (isGenre) genreName else section.title, color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(start = 20.dp, bottom = 6.dp),
                     )
+                    if (entries.isEmpty()) Box(Modifier.height(POSTER_H + 16.dp))
                     HeroRow(
-                        entries = section.entries,
+                        entries = entries,
                         focusIndex = if (si == focusRow) selected[si] ?: 0 else null,
                         listState = rowStates.getOrPut(si) { LazyListState() },
                         requesters = requesters.getOrPut(si) { HashMap() },
@@ -308,7 +338,7 @@ fun FeatureList(
                             selected[si] = i
                             focusRow = si
                             state.visited = true
-                            val e = section.entries[i]
+                            val e = entries[i]
                             if (!e.isMore) {
                                 onWallpaper(wallpaperFor(e))
                                 state.focused = e
@@ -317,9 +347,27 @@ fun FeatureList(
                                 scope.launch { e.status = client.releaseStatus(e.tmdbId) }
                             }
                         },
-                        onClick = { e -> if (e.isMore) onMore(section.genre ?: "") else if (section.playDirect && e.onServer != null) onDetails(e) else onPlay(e) },
+                        onClick = { e -> if (e.isMore) onMore(genreName ?: "") else if (section.playDirect && e.onServer != null) onDetails(e) else onPlay(e) },
                         onLongClick = { e -> if (!e.isMore) onDetails(e) },
                     )
+                    if (isGenre) {
+                        GenreStrip(
+                            genres = section.genreList,
+                            selected = genreSel,
+                            requesters = stripRequesters,
+                            onFocus = { i ->
+                                state.genreIndex = i
+                                selected[si] = 0
+                                focusRow = si
+                                state.visited = true
+                            },
+                            onPick = {
+                                try { requesters[si]?.get(0)?.requestFocus() } catch (e: Exception) { /* posters not loaded yet */ }
+                            },
+                            onHold = { i -> pinGenre = section.genreList.getOrNull(i) },
+                            onFocusState = { stripFocused = it },
+                        )
+                    }
                 }
             }
 
@@ -354,6 +402,14 @@ fun FeatureList(
                     }
                 }
             }
+        }
+        pinGenre?.let { g ->
+            PinDialog(
+                title = g,
+                pinned = Pins.hasGenre(g, genreTypes),
+                onToggle = { Pins.toggleGenre(g, genreTypes) },
+                onClose = { pinGenre = null },
+            )
         }
       }
     }
@@ -425,6 +481,7 @@ fun BrowseScreen(
             loading = false
 
             val resume = client.resume().filter { if (tab == Tab.Movies) it.isMovie else if (tab == Tab.Shows) it.isEpisode else true }
+            if (tab == Tab.Home) WatchNext.publish(context, client, resume)
             if (resume.isNotEmpty()) add(HeroSection("Continue watching", resume.map { itemEntry(it, client) }, playDirect = true))
 
             if (tab != Tab.Movies && UiSettings.showUpNext) {
@@ -436,13 +493,16 @@ fun BrowseScreen(
             val recent = client.library(types, "DateCreated", true, limit = 15)
             if (recent.isNotEmpty()) add(HeroSection("Recently added", recent.map { itemEntry(it, client) }))
 
-            val onServerGenres = client.genres(types).associateBy { it.lowercase() }
-            val chosen = POPULAR_GENRES.mapNotNull { onServerGenres[it.lowercase()] }.take(8)
-            for (genre in chosen) {
-                val found = client.byGenre(genre, types, 10)
-                if (found.size >= 4) {
-                    add(HeroSection(genre, found.map { itemEntry(it, client) } + moreEntry(genre), mini = true, genre = genre))
+            // Every genre on your server: the popular ones first, the rest A to Z.
+            val onServerGenres = client.genres(types)
+            val ordered = POPULAR_GENRES.mapNotNull { p -> onServerGenres.firstOrNull { it.equals(p, ignoreCase = true) } } +
+                onServerGenres.filter { g -> POPULAR_GENRES.none { it.equals(g, ignoreCase = true) } }.sorted()
+            if (ordered.isNotEmpty()) {
+                val pick = ordered[state.genreIndex.coerceIn(0, ordered.size - 1)]
+                if (state.genreEntries[pick] == null) {
+                    state.genreEntries[pick] = client.byGenre(pick, types, 10).map { itemEntry(it, client) } + moreEntry(pick)
                 }
+                add(HeroSection("", emptyList(), genreList = ordered))
             }
             if (!fresh) sections = acc.toList()
             state.loaded = true
@@ -471,6 +531,8 @@ fun BrowseScreen(
                         onMore = { genre -> onGenre(genre, types) },
                         onOpenItem = onOpen,
                         onExit = { askExit = true },
+                        genreLoader = { g -> client.byGenre(g, types, 10).map { itemEntry(it, client) } + moreEntry(g) },
+                        genreTypes = types,
                     )
                 }
             }
@@ -577,11 +639,6 @@ fun GenreScreen(
                   Column(contentModifier.fillMaxSize()) {
                     Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 40.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(genre, color = Palette.Text, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        GlassButton(
-                            if (Pins.hasGenre(genre, types)) "Unpin from menu" else "Pin to menu",
-                            { Pins.toggleGenre(genre, types) },
-                            compact = true,
-                        )
                     }
                     FeatureList(
                         modifier = Modifier.weight(1f),
@@ -647,6 +704,7 @@ private fun HeroRow(
                 }
                 PosterCard(
                     entry = entry,
+                    fade = if (focusIndex == null) 1f else posterAlpha(kotlin.math.abs(index - focusIndex)),
                     focusRequester = requester,
                     onFocused = { onSelect(index) },
                     onClick = { onClick(entry) },
@@ -662,6 +720,7 @@ private fun HeroRow(
 @Composable
 private fun PosterCard(
     entry: HeroEntry,
+    fade: Float,
     focusRequester: FocusRequester,
     onFocused: () -> Unit,
     onClick: () -> Unit,
@@ -670,9 +729,11 @@ private fun PosterCard(
     var focused by remember { mutableStateOf(false) }
     val grow by animateFloatAsState(if (focused) 1.07f else 1f, label = "posterGrow")
     val shape = RoundedCornerShape(UiSettings.corner.tile.coerceAtMost(10.dp))
+    val seeThrough by animateFloatAsState(fade, label = "posterFade")
 
     Box(
         Modifier
+            .graphicsLayer { alpha = seeThrough }
             .width(POSTER_W)
             .height(POSTER_H)
             .scale(grow)
@@ -719,6 +780,101 @@ private fun PosterCard(
             ) { Text("✓", color = Color.Black, fontSize = 9.sp, fontWeight = FontWeight.Bold) }
         }
         entry.progress?.let { ProgressLine(it, Modifier.align(Alignment.BottomStart)) }
+    }
+}
+
+/** How solid a poster is: the one you're on is fully solid, and each step away (either side) fades more. */
+private fun posterAlpha(distance: Int): Float = when (distance) {
+    0 -> 1f
+    1 -> 0.85f
+    2 -> 0.65f
+    3 -> 0.45f
+    else -> 0.25f
+}
+
+/** The strip of genres under the posters. Moving along it swaps the posters; OK jumps up to them; holding OK offers to pin. */
+@OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
+@Composable
+private fun GenreStrip(
+    genres: List<String>,
+    selected: Int,
+    requesters: HashMap<Int, FocusRequester>,
+    onFocus: (Int) -> Unit,
+    onPick: () -> Unit,
+    onHold: (Int) -> Unit,
+    onFocusState: (Boolean) -> Unit,
+) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(selected) { listState.animateScrollToItem((selected - 1).coerceAtLeast(0)) }
+    CompositionLocalProvider(LocalBringIntoViewSpec provides NoAutoScroll) {
+        LazyRow(
+            modifier = Modifier
+                .focusProperties { enter = { requesters[selected] ?: FocusRequester.Default } }
+                .focusGroup()
+                .onFocusChanged { onFocusState(it.hasFocus) },
+            state = listState,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp),
+        ) {
+            itemsIndexed(genres) { i, g ->
+                val requester = remember { FocusRequester() }
+                DisposableEffect(i) {
+                    requesters[i] = requester
+                    onDispose { if (requesters[i] === requester) requesters.remove(i) }
+                }
+                FocusBox(
+                    onClick = onPick,
+                    onLongClick = { onHold(i) },
+                    onFocused = { onFocus(i) },
+                    modifier = Modifier.height(28.dp).focusRequester(requester),
+                    shape = RoundedCornerShape(50),
+                    focusedScale = 1.06f,
+                    edge = false,
+                ) { focused ->
+                    val on = i == selected
+                    Box(
+                        Modifier.fillMaxHeight()
+                            .background(if (on) Color.White else Color.White.copy(alpha = if (focused) 0.32f else 0.16f))
+                            .padding(horizontal = 14.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(g, color = if (on) Color.Black else Palette.Text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Hold OK on a genre: pin it to the menu (or unpin it). */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun PinDialog(title: String, pinned: Boolean, onToggle: () -> Unit, onClose: () -> Unit) {
+    val first = remember { FocusRequester() }
+    BackHandler { onClose() }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(80)
+        try { first.requestFocus() } catch (e: Exception) { /* not laid out yet */ }
+    }
+    val panel = RoundedCornerShape(16.dp)
+    Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
+        Column(
+            Modifier
+                .width(250.dp)
+                .background(Color(0xF50B0B0D), panel)
+                .focusProperties { exit = { FocusRequester.Cancel } }
+                .focusGroup()
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(title, color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 2)
+            GlassButton(
+                if (pinned) "Unpin from menu" else "Pin to menu",
+                { onToggle(); onClose() },
+                modifier = Modifier.fillMaxWidth().focusRequester(first), primary = true, compact = true,
+            )
+            GlassButton("Cancel", onClose, modifier = Modifier.fillMaxWidth(), compact = true)
+        }
     }
 }
 
@@ -807,11 +963,6 @@ fun CollectionScreen(
                                 color = Palette.TextMuted, fontSize = 11.sp,
                             )
                         }
-                        GlassButton(
-                            if (Pins.hasCollection(tile.key)) "Unpin from menu" else "Pin to menu",
-                            { Pins.toggleCollection(tile.key, tile.name) },
-                            compact = true,
-                        )
                     }
                     FeatureList(
                         modifier = Modifier.weight(1f),

@@ -4,7 +4,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -44,10 +45,12 @@ import com.fancyfin.tv.data.JellyfinClient
  * Anything you can move to with the remote. It grows a little and gets a bright edge when focused.
  * The click handler is what the centre button of the remote triggers.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FocusBox(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
     shape: RoundedCornerShape = RoundedCornerShape(UiSettings.corner.card),
     focusedScale: Float = 1.08f,
     edge: Boolean = true,
@@ -74,7 +77,7 @@ fun FocusBox(
                 focused = it.isFocused
                 if (it.isFocused) onFocused()
             }
-            .clickable(onClick = onClick),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
         content(focused)
     }

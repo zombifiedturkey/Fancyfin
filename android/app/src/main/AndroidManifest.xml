@@ -3,6 +3,8 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Lets Continue watching show up in the Android TV launcher's Watch Next row. -->
+    <uses-permission android:name="com.android.providers.tv.permission.WRITE_EPG_DATA" />
 
     <!-- Runs on Android TV (leanback) boxes like the Shield, and also on a phone or tablet. -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
@@ -29,6 +31,13 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Opened from a Watch Next card: fancyfin://play/<item id> -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="fancyfin" android:host="play" />
             </intent-filter>
         </activity>
 
