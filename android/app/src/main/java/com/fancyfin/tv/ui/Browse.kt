@@ -2,6 +2,8 @@ package com.fancyfin.tv.ui
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.draw.scale
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.draw.clipToBounds
@@ -150,8 +152,7 @@ class GridSpec(
  * The poster rows live in a window at the bottom of the screen that shows exactly one row (so nothing of the
  * next row peeks in) and the details sit still above it. Down in the grid of everything the window grows.
  */
-private val ROW_VIEW_H = 286.dp
-private val GRID_VIEW_H = 350.dp
+private val ROW_VIEW_H = 270.dp
 private val VIEW_HEADROOM = 12.dp
 private val POSTER_W = 128.dp
 private val POSTER_H = 192.dp
@@ -283,15 +284,19 @@ fun FeatureList(
     val requesters = remember { HashMap<Int, HashMap<Int, FocusRequester>>() }
 
     val base = sections.size
-    LaunchedEffect(focusRow) { if (grid != null && focusRow >= base) columnState.animateScrollToItem(focusRow - base) }
+    LaunchedEffect(focusRow) { if (grid != null && focusRow >= base) columnState.animateScrollToItem((focusRow - base - 1).coerceAtLeast(0)) }
     val gridFirst = remember { FocusRequester() }
     val genreIdx = sections.indexOfFirst { it.genreList.isNotEmpty() }
 
     // The genre picker: moving along the strip swaps the posters (loaded once, then kept).
     val genreNames = sections.firstOrNull { it.genreList.isNotEmpty() }?.genreList ?: emptyList()
     val genreSel = state.genreIndex.coerceIn(0, (genreNames.size - 1).coerceAtLeast(0))
-    val stripRequesters = remember { HashMap<Int, FocusRequester>() }
     var stripFocused by remember { mutableStateOf(false) }
+    // Which genre picker is open: a row's section index, -1 for the grid's, or null for none.
+    var pickerOpen by remember { mutableStateOf<Int?>(null) }
+    var gridGenre by remember { mutableStateOf<String?>(null) }
+    val rowGenrePill = remember { FocusRequester() }
+    val gridGenrePill = remember { FocusRequester() }
     var pinGenre by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(genreSel, genreNames) {
         val loader = genreLoader ?: return@LaunchedEffect
@@ -300,7 +305,7 @@ fun FeatureList(
             kotlinx.coroutines.delay(200)
             try { state.genreEntries[g] = loader(g) } catch (e: Exception) { return@LaunchedEffect }
         }
-        if (stripFocused) state.focused = state.genreEntries[g]?.firstOrNull { !it.isMore }
+        if (stripFocused || pickerOpen != null) state.focused = state.genreEntries[g]?.firstOrNull { !it.isMore }
     }
 
     // Land on the first tile of the first row when the page opens, or back on the tile you left.
@@ -344,7 +349,7 @@ fun FeatureList(
     CompositionLocalProvider(LocalBringIntoViewSpec provides NoAutoScroll) {
       BoxWithConstraints(modifier.fillMaxSize().onFocusChanged { listFocused = it.hasFocus }) {
         val inGrid = grid != null && focusRow >= sections.size
-        val viewH by androidx.compose.animation.core.animateDpAsState(if (inGrid) GRID_VIEW_H else ROW_VIEW_H, label = "rowWindow")
+        val viewH = ROW_VIEW_H
         InfoBlock(state.focused, client, Modifier.align(Alignment.TopStart).height((maxHeight - viewH).coerceAtLeast(120.dp)))
         // Only one row is ever on show: moving to another row fades it in place of the last one (no sliding, so
         // nothing gets cut off). Rows that aren't on show are parked out of the way so the remote can't land on them.
@@ -356,14 +361,14 @@ fun FeatureList(
                     when (ev.key) {
                         Key.DirectionDown -> when {
                             inGrid -> false
-                            focusRow == genreIdx && !stripFocused -> false
+                            focusRow == genreIdx && stripFocused -> false
                             focusRow < last -> { goRow(focusRow + 1); true }
                             grid != null -> { goGrid(); true }
                             else -> true
                         }
                         Key.DirectionUp -> when {
                             inGrid -> if (focusRow == base) { goRow(last); true } else false
-                            focusRow == genreIdx && stripFocused -> false
+                            focusRow == genreIdx && !stripFocused -> false
                             focusRow > 0 -> { goRow(focusRow - 1); true }
                             else -> true
                         }
@@ -385,10 +390,16 @@ fun FeatureList(
                 val entries = if (isGenre) state.genreEntries[genreName] ?: emptyList() else section.entries
                 Box(Modifier.fillMaxWidth().height(ROW_VIEW_H - VIEW_HEADROOM), contentAlignment = Alignment.BottomStart) {
                 Column {
-                    Text(
-                        if (isGenre) genreName else section.title, color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(start = 20.dp, bottom = 6.dp),
-                    )
+                    Row(Modifier.padding(start = 20.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(if (isGenre) genreName else section.title, color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        if (isGenre) {
+                            SortPill(
+                                "Genres ▾", false, { pickerOpen = si },
+                                Modifier.focusRequester(rowGenrePill).onFocusChanged { stripFocused = it.isFocused },
+                                onFocused = { focusRow = si; state.visited = true },
+                            )
+                        }
+                    }
                     if (entries.isEmpty()) Box(Modifier.height(POSTER_H + 16.dp))
                     HeroRow(
                         entries = entries,
@@ -412,24 +423,6 @@ fun FeatureList(
                         onClick = { e -> if (e.isMore) onMore(if (isGenre) genreName else section.genre ?: "") else if (section.playDirect && e.onServer != null) onDetails(e) else onPlay(e) },
                         onLongClick = { e -> if (!e.isMore) onDetails(e) },
                     )
-                    if (isGenre) {
-                        GenreStrip(
-                            genres = section.genreList,
-                            selected = genreSel,
-                            requesters = stripRequesters,
-                            onFocus = { i ->
-                                state.genreIndex = i
-                                selected[si] = 0
-                                focusRow = si
-                                state.visited = true
-                            },
-                            onPick = {
-                                try { requesters[si]?.get(0)?.requestFocus() } catch (e: Exception) { /* posters not loaded yet */ }
-                            },
-                            onHold = { i -> pinGenre = section.genreList.getOrNull(i) },
-                            onFocusState = { stripFocused = it },
-                        )
-                    }
                 }
                 }
                 }
@@ -437,47 +430,85 @@ fun FeatureList(
 
             if (grid != null) {
               val gridShown by animateFloatAsState(if (inGrid) 1f else 0f, tween(260), label = "gridFade")
-              LazyColumn(
+              val shownItems = remember(grid.items, gridGenre) { if (gridGenre == null) grid.items else grid.items.filter { gridGenre in it.genres } }
+              Column(
                 Modifier.fillMaxSize()
                     .offset(y = if (inGrid || gridShown > 0.01f) 0.dp else 4000.dp)
                     .graphicsLayer { alpha = gridShown },
-                state = columnState,
-                contentPadding = PaddingValues(top = VIEW_HEADROOM, bottom = GRID_VIEW_H),
               ) {
-                item {
-                    Column(Modifier.padding(bottom = 8.dp)) {
-                        Text(
-                            "All titles", color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(start = 20.dp, bottom = 8.dp),
+                Column(Modifier.padding(top = VIEW_HEADROOM, bottom = 4.dp)) {
+                    Text(
+                        "All titles", color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(start = 20.dp, bottom = 8.dp),
+                    )
+                    Row(Modifier.padding(start = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        grid.labels.forEachIndexed { i, label ->
+                            SortPill(
+                                label, i == grid.selected, { grid.onSelect(i) },
+                                if (i == grid.selected) Modifier.focusRequester(gridFirst) else Modifier,
+                                onFocused = { focusRow = base },
+                            )
+                        }
+                        SortPill(
+                            if (gridGenre == null) "Genres ▾" else "$gridGenre ▾", gridGenre != null, { pickerOpen = -1 },
+                            Modifier.focusRequester(gridGenrePill),
+                            onFocused = { focusRow = base },
                         )
-                        Row(Modifier.padding(start = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            grid.labels.forEachIndexed { i, label ->
-                                GlassButton(
-                                    label, { grid.onSelect(i) },
-                                    modifier = if (i == grid.selected) Modifier.focusRequester(gridFirst) else Modifier,
-                                    primary = i == grid.selected, clear = true, onFocused = { focusRow = base },
+                    }
+                }
+                LazyColumn(Modifier.fillMaxWidth().weight(1f), state = columnState, contentPadding = PaddingValues(top = VIEW_HEADROOM)) {
+                    itemsIndexed(shownItems.chunked(9)) { r, chunk ->
+                        Row(Modifier.padding(start = 20.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            chunk.forEach { item ->
+                                ItemCard(
+                                    item = item, client = client, width = 92.dp, height = 138.dp, landscape = false,
+                                    onClick = { onOpenItem(item) },
+                                    onFocused = {
+                                        focusRow = base + 1 + r
+                                        onWallpaper(client.backdrop(item, 96))
+                                        state.focused = itemEntry(item, client)
+                                    },
                                 )
                             }
                         }
                     }
                 }
-                itemsIndexed(grid.items.chunked(9)) { r, chunk ->
-                    Row(Modifier.padding(start = 20.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        chunk.forEach { item ->
-                            ItemCard(
-                                item = item, client = client, width = 92.dp, height = 138.dp, landscape = false,
-                                onClick = { onOpenItem(item) },
-                                onFocused = {
-                                    focusRow = base + 1 + r
-                                    onWallpaper(client.backdrop(item, 96))
-                                    state.focused = itemEntry(item, client)
-                                },
-                            )
-                        }
-                    }
-                }
               }
             }
+        }
+        pickerOpen?.let { which ->
+            val isRow = which >= 0
+            val options = if (isRow) sections.getOrNull(which)?.genreList ?: emptyList()
+            else grid?.items?.flatMap { it.genres }?.groupingBy { it }?.eachCount()?.entries?.sortedByDescending { it.value }?.map { it.key } ?: emptyList()
+            GenrePicker(
+                genres = options,
+                current = if (isRow) genreNames.getOrNull(genreSel) else gridGenre,
+                allowAll = !isRow,
+                onPick = { g ->
+                    pickerOpen = null
+                    if (isRow) {
+                        val idx = options.indexOf(g)
+                        if (g != null && idx >= 0) {
+                            state.genreIndex = idx
+                            selected[which] = 0
+                            focusRow = which
+                            scope.launch {
+                                var waited = 0
+                                while (state.genreEntries[g].isNullOrEmpty() && waited < 30) { kotlinx.coroutines.delay(100); waited++ }
+                                if (state.genreEntries[g].isNullOrEmpty()) { try { rowGenrePill.requestFocus() } catch (e: Exception) { /* gone */ } } else goRow(which)
+                            }
+                        }
+                    } else {
+                        gridGenre = g
+                        scope.launch { kotlinx.coroutines.delay(60); try { gridGenrePill.requestFocus() } catch (e: Exception) { /* gone */ } }
+                    }
+                },
+                onHold = { g -> pinGenre = g },
+                onClose = {
+                    pickerOpen = null
+                    scope.launch { kotlinx.coroutines.delay(60); try { (if (isRow) rowGenrePill else gridGenrePill).requestFocus() } catch (e: Exception) { /* gone */ } }
+                },
+            )
         }
         pinGenre?.let { g ->
             PinDialog(
@@ -882,56 +913,78 @@ private fun posterAlpha(distance: Int): Float = when (distance) {
     else -> 0.5f
 }
 
-/** The strip of genres under the posters. Moving along it swaps the posters; OK jumps up to them; holding OK offers to pin. */
+/** A rounded glass button for the sort choices and the genre picker; the chosen one is filled with the accent colour. */
+@Composable
+private fun SortPill(label: String, on: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, onFocused: () -> Unit = {}) {
+    FocusBox(
+        onClick = onClick,
+        onFocused = onFocused,
+        modifier = modifier.height(30.dp),
+        shape = RoundedCornerShape(50),
+        focusedScale = 1.06f,
+    ) { focused ->
+        Box(
+            Modifier.fillMaxHeight()
+                .background(if (on) Palette.Accent.copy(alpha = if (focused) 1f else 0.85f) else Color.White.copy(alpha = if (focused) 0.32f else 0.14f))
+                .padding(horizontal = 16.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(label, color = if (on) Color.Black else Palette.Text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        }
+    }
+}
+
+/** Pick a genre from a panel. OK chooses it; holding OK offers to pin it to the menu. `null` means every genre. */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 @Composable
-private fun GenreStrip(
-    genres: List<String>,
-    selected: Int,
-    requesters: HashMap<Int, FocusRequester>,
-    onFocus: (Int) -> Unit,
-    onPick: () -> Unit,
-    onHold: (Int) -> Unit,
-    onFocusState: (Boolean) -> Unit,
-) {
-    val listState = rememberLazyListState()
-    LaunchedEffect(selected) { listState.animateScrollToItem((selected - 1).coerceAtLeast(0)) }
-    CompositionLocalProvider(LocalBringIntoViewSpec provides NoAutoScroll) {
-        LazyRow(
-            modifier = Modifier
-                .focusProperties { enter = { requesters[selected] ?: FocusRequester.Default } }
+private fun GenrePicker(genres: List<String>, current: String?, allowAll: Boolean, onPick: (String?) -> Unit, onHold: (String) -> Unit, onClose: () -> Unit) {
+    BackHandler { onClose() }
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(80)
+        try { first.requestFocus() } catch (e: Exception) { /* not laid out yet */ }
+    }
+    val options: List<String?> = if (allowAll) listOf<String?>(null) + genres else genres
+    val lead = options.indexOf(current).coerceAtLeast(0)
+    val panel = RoundedCornerShape(16.dp)
+    Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
+        Column(
+            Modifier
+                .width(560.dp)
+                .background(Color(0xF50B0B0D), panel)
+                .focusProperties { exit = { FocusRequester.Cancel } }
                 .focusGroup()
-                .onFocusChanged { onFocusState(it.hasFocus) },
-            state = listState,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp),
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            itemsIndexed(genres) { i, g ->
-                val requester = remember { FocusRequester() }
-                DisposableEffect(i) {
-                    requesters[i] = requester
-                    onDispose { if (requesters[i] === requester) requesters.remove(i) }
-                }
-                FocusBox(
-                    onClick = onPick,
-                    onLongClick = { onHold(i) },
-                    onFocused = { onFocus(i) },
-                    modifier = Modifier.height(28.dp).focusRequester(requester),
-                    shape = RoundedCornerShape(50),
-                    focusedScale = 1.06f,
-                    edge = false,
-                ) { focused ->
-                    val on = i == selected
-                    Box(
-                        Modifier.fillMaxHeight()
-                            .background(if (on) Color.White else Color.White.copy(alpha = if (focused) 0.32f else 0.16f))
-                            .padding(horizontal = 14.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(g, color = if (on) Color.Black else Palette.Text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text("Genres", color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Column(Modifier.height(230.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                options.withIndex().chunked(4).forEach { rowItems ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        rowItems.forEach { (i, g) ->
+                            FocusBox(
+                                onClick = { onPick(g) },
+                                onLongClick = if (g != null) ({ onHold(g) }) else null,
+                                modifier = (if (i == lead) Modifier.focusRequester(first) else Modifier).width(125.dp).height(30.dp),
+                                shape = RoundedCornerShape(50),
+                                focusedScale = 1.05f,
+                                edge = false,
+                            ) { focused ->
+                                val on = g == current
+                                Box(
+                                    Modifier.fillMaxSize()
+                                        .background(if (on) Palette.Accent else Color.White.copy(alpha = if (focused) 0.32f else 0.14f))
+                                        .padding(horizontal = 10.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(g ?: "All genres", color = if (on) Color.Black else Palette.Text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                                }
+                            }
+                        }
                     }
                 }
             }
+            Text("Hold OK on a genre to pin it to the menu", color = Palette.TextMuted, fontSize = 10.sp)
         }
     }
 }
