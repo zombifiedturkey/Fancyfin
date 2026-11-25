@@ -320,7 +320,7 @@ fun FeatureList(
         ) {
             itemsIndexed(sections) { si, section ->
                 val isGenre = section.genreList.isNotEmpty()
-                val genreName = if (isGenre) section.genreList.getOrNull(genreSel) ?: "" else section.genre
+                val genreName: String = if (isGenre) section.genreList.getOrNull(genreSel) ?: "" else ""
                 val entries = if (isGenre) state.genreEntries[genreName] ?: emptyList() else section.entries
                 Column {
                     Text(
@@ -347,7 +347,7 @@ fun FeatureList(
                                 scope.launch { e.status = client.releaseStatus(e.tmdbId) }
                             }
                         },
-                        onClick = { e -> if (e.isMore) onMore(genreName ?: "") else if (section.playDirect && e.onServer != null) onDetails(e) else onPlay(e) },
+                        onClick = { e -> if (e.isMore) onMore(if (isGenre) genreName else section.genre ?: "") else if (section.playDirect && e.onServer != null) onDetails(e) else onPlay(e) },
                         onLongClick = { e -> if (!e.isMore) onDetails(e) },
                     )
                     if (isGenre) {
