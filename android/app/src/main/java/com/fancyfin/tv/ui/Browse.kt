@@ -16,6 +16,7 @@ import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -142,8 +143,13 @@ class GridSpec(
     val onSelect: (Int) -> Unit,
 )
 
-/** How tall the details at the top of a browse page are; the rows start below it. */
-private val INFO_HEIGHT = 250.dp
+/**
+ * The poster rows live in a window at the bottom of the screen that shows exactly one row (so nothing of the
+ * next row peeks in) and the details sit still above it. Down in the grid of everything the window grows.
+ */
+private val ROW_VIEW_H = 286.dp
+private val GRID_VIEW_H = 350.dp
+private val VIEW_HEADROOM = 12.dp
 private val POSTER_W = 128.dp
 private val POSTER_H = 192.dp
 
@@ -310,18 +316,21 @@ fun FeatureList(
         else e.onServer?.let { client.backdrop(it, 96) } ?: smallTmdb(e.backdrop)
 
     CompositionLocalProvider(LocalBringIntoViewSpec provides NoAutoScroll) {
-      Box(modifier.fillMaxSize().onFocusChanged { listFocused = it.hasFocus }) {
-        InfoBlock(state.focused, client, Modifier.align(Alignment.TopStart).height(INFO_HEIGHT))
+      BoxWithConstraints(modifier.fillMaxSize().onFocusChanged { listFocused = it.hasFocus }) {
+        val inGrid = grid != null && focusRow >= sections.size
+        val viewH by androidx.compose.animation.core.animateDpAsState(if (inGrid) GRID_VIEW_H else ROW_VIEW_H, label = "rowWindow")
+        InfoBlock(state.focused, client, Modifier.align(Alignment.TopStart).height((maxHeight - viewH).coerceAtLeast(120.dp)))
         LazyColumn(
-            Modifier.fillMaxSize().padding(top = INFO_HEIGHT),
+            Modifier.align(Alignment.BottomStart).fillMaxWidth().height(viewH),
             state = columnState,
-            contentPadding = PaddingValues(top = 0.dp, bottom = 300.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(top = VIEW_HEADROOM, bottom = GRID_VIEW_H),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             itemsIndexed(sections) { si, section ->
                 val isGenre = section.genreList.isNotEmpty()
                 val genreName: String = if (isGenre) section.genreList.getOrNull(genreSel) ?: "" else ""
                 val entries = if (isGenre) state.genreEntries[genreName] ?: emptyList() else section.entries
+                Box(Modifier.fillMaxWidth().height(ROW_VIEW_H - VIEW_HEADROOM), contentAlignment = Alignment.BottomStart) {
                 Column {
                     Text(
                         if (isGenre) genreName else section.title, color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.Bold,
@@ -369,12 +378,13 @@ fun FeatureList(
                         )
                     }
                 }
+                }
             }
 
             if (grid != null) {
                 val base = sections.size
                 item {
-                    Column {
+                    Column(Modifier.padding(bottom = 8.dp)) {
                         Text(
                             "All titles", color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(start = 20.dp, bottom = 8.dp),
@@ -386,11 +396,11 @@ fun FeatureList(
                         }
                     }
                 }
-                itemsIndexed(grid.items.chunked(8)) { r, chunk ->
-                    Row(Modifier.padding(start = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                itemsIndexed(grid.items.chunked(9)) { r, chunk ->
+                    Row(Modifier.padding(start = 20.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         chunk.forEach { item ->
                             ItemCard(
-                                item = item, client = client, width = 96.dp, height = 144.dp, landscape = false,
+                                item = item, client = client, width = 92.dp, height = 138.dp, landscape = false,
                                 onClick = { onOpenItem(item) },
                                 onFocused = {
                                     focusRow = base + 1 + r
