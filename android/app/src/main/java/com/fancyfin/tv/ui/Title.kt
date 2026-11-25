@@ -25,6 +25,10 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -279,33 +283,15 @@ fun TitleScreen(
     val best = versions.maxWithOrNull(compareBy<MediaVersion>({ resolutionHeight(it) }, { rangeRank(it) }, { it.sizeBytes }))
 
     Box(Modifier.fillMaxSize()) {
-        // The accent gradient, with the movie's big picture across the top fading into it. The picture
-        // scrolls away with the page.
-        Backdrop(null)
-        if (hero != null) {
-            val scrolled = if (listState.firstVisibleItemIndex == 0) listState.firstVisibleItemScrollOffset else 100000
-            Box(
-                Modifier.fillMaxWidth().height(400.dp)
-                    .offset { IntOffset(0, -scrolled) }
-                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-                    .drawWithContent {
-                        drawContent()
-                        drawRect(
-                            Brush.verticalGradient(0f to Color.Black, 0.45f to Color.Black, 1f to Color.Transparent),
-                            blendMode = BlendMode.DstIn,
-                        )
-                    },
-            ) {
-                AsyncImage(model = hero, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Color(0xB0000000), 0.55f to Color(0x30000000), 1f to Color.Transparent)))
-            }
-        }
+        // The movie's picture fills the screen, washed with its own colour from the left.
+        HeroBackdropUrl(hero)
+        ClockPill(Modifier.align(Alignment.TopEnd).padding(top = 14.dp, end = 20.dp))
 
         CompositionLocalProvider(LocalBringIntoViewSpec provides NoAutoScroll) {
             LazyColumn(
                 Modifier.fillMaxSize(),
                 state = listState,
-                contentPadding = PaddingValues(top = 80.dp, bottom = 300.dp),
+                contentPadding = PaddingValues(top = 56.dp, bottom = 300.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 var n = 0
@@ -314,32 +300,24 @@ fun TitleScreen(
                 // the buttons and the cast sitting low down.
                 val headerIndex = n++
                 item {
-                    Row(Modifier.padding(horizontal = 24.dp).then(track(headerIndex)), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                        Box(
-                            Modifier.width(100.dp).height(150.dp)
-                                .clip(RoundedCornerShape(UiSettings.corner.card))
-                                .background(Palette.GlassFill),
-                        ) {
-                            if (posterUrl != null) AsyncImage(model = posterUrl, contentDescription = title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    Column(Modifier.padding(horizontal = 24.dp).then(track(headerIndex)), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        val logo = shown?.let { client.logo(it) }
+                        if (logo != null) {
+                            AsyncImage(
+                                model = logo, contentDescription = title, contentScale = ContentScale.Fit,
+                                alignment = Alignment.CenterStart, modifier = Modifier.height(72.dp).width(320.dp),
+                            )
+                        } else {
+                            Text(title, color = Palette.Text, fontSize = 32.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(560.dp))
                         }
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            val logo = shown?.let { client.logo(it) }
-                            if (logo != null) {
-                                AsyncImage(
-                                    model = logo, contentDescription = title, contentScale = ContentScale.Fit,
-                                    alignment = Alignment.CenterStart, modifier = Modifier.height(60.dp).width(300.dp),
-                                )
-                            } else {
-                                Text(title, color = Palette.Text, fontSize = 28.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            }
-                            tagline?.let { Text(it, color = Palette.Text, fontSize = 12.sp, fontStyle = FontStyle.Italic, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                listOfNotNull(
-                                    year?.toString(), shown?.officialRating, runtimeText(minutes), rating?.let { "★ " + "%.1f".format(it) },
-                                ).plus(genres.take(3)).forEach { Chip(it) }
-                            }
-                            overview?.let { Text(it, color = Palette.Text, fontSize = 12.sp, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(620.dp)) }
+                        tagline?.let { Text(it, color = Palette.Text, fontSize = 12.sp, fontStyle = FontStyle.Italic, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            val facts = listOfNotNull(year?.toString(), runtimeText(minutes), genres.take(3).takeIf { it.isNotEmpty() }?.joinToString(", "))
+                            if (facts.isNotEmpty()) Text(facts.joinToString("   "), color = Palette.Text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            shown?.officialRating?.let { Chip(it) }
+                            rating?.let { Chip("★ " + "%.1f".format(it)) }
                         }
+                        overview?.let { Text(it, color = Palette.Text, fontSize = 12.sp, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(560.dp)) }
                     }
                 }
 
@@ -354,10 +332,10 @@ fun TitleScreen(
                             var firstAssigned = false
                             fun lead(): Modifier = if (!firstAssigned) { firstAssigned = true; Modifier.focusRequester(first) } else Modifier
                             if (target != null) {
-                                GlassButton(
-                                    compact = true,
+                                PillButton(
                                     label = (if (resuming) "Resume" else "Play") + (target.episodeLabel?.let { " $it" } ?: ""),
-                                    primary = true,
+                                    icon = Icons.Filled.PlayArrow,
+                                    solid = true,
                                     modifier = lead(),
                                     onClick = { onPlay(target) },
                                 )
@@ -365,15 +343,14 @@ fun TitleScreen(
                             val addId = tmdbId
                             if (ref.server == null && addId != null) {
                                 val app = if (kind == "movie") "Radarr" else "Sonarr"
-                                GlassButton(
-                                    compact = true,
+                                PillButton(
                                     label = when (arrState) {
                                         "in" -> "In $app ✓"
                                         "adding" -> "Adding…"
                                         "added" -> "Added to $app ✓"
                                         else -> "Add to $app"
                                     },
-                                    primary = arrState == null,
+                                    solid = arrState == null,
                                     modifier = lead(),
                                     onClick = {
                                         if (arrState == null) {
@@ -385,28 +362,28 @@ fun TitleScreen(
                                 )
                             }
                             if (shown != null) {
-                                GlassButton(
-                                    compact = true,
-                                    label = if (shown.played) "Watched ✓" else "Mark watched",
+                                IconCircleButton(
+                                    icon = Icons.Filled.Star,
+                                    on = shown.favorite,
+                                    onClick = {
+                                        val next = !shown.favorite
+                                        scope.launch {
+                                            try {
+                                                client.setFavorite(shown.id, next)
+                                                item = client.item(shown.id, shown.duplicateIds)
+                                            } catch (e: Exception) { /* leave the button as it was */ }
+                                        }
+                                    },
+                                )
+                                IconCircleButton(
+                                    icon = Icons.Filled.Check,
+                                    on = shown.played,
                                     modifier = lead(),
                                     onClick = {
                                         val next = !shown.played
                                         scope.launch {
                                             try {
                                                 client.setPlayed(shown.id, next)
-                                                item = client.item(shown.id, shown.duplicateIds)
-                                            } catch (e: Exception) { /* leave the button as it was */ }
-                                        }
-                                    },
-                                )
-                                GlassButton(
-                                    compact = true,
-                                    label = if (shown.favorite) "★ Favourite" else "☆ Favourite",
-                                    onClick = {
-                                        val next = !shown.favorite
-                                        scope.launch {
-                                            try {
-                                                client.setFavorite(shown.id, next)
                                                 item = client.item(shown.id, shown.duplicateIds)
                                             } catch (e: Exception) { /* leave the button as it was */ }
                                         }
@@ -419,23 +396,18 @@ fun TitleScreen(
                         val info = ref.server == null || best != null
                         if (info) {
                             Column(
-                                Modifier.background(Color(0x99000000), RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 6.dp),
+                                Modifier.padding(horizontal = 4.dp),
                                 horizontalAlignment = Alignment.End,
                                 verticalArrangement = Arrangement.spacedBy(2.dp),
                             ) {
                                 if (ref.server != null && best != null) {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Text(best.resolution, color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                        Text(
-                                            best.range, fontSize = 12.sp,
-                                            color = if (best.range != "SDR") Palette.Accent else Palette.TextMuted,
-                                            fontWeight = FontWeight.SemiBold,
-                                        )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        InfoPill(best.resolution + if (best.codec.isNotEmpty()) " (${best.codec})" else "")
+                                        if (best.range != "SDR") InfoPill(best.range, accent = true)
+                                        if (best.audio.isNotEmpty()) InfoPill(best.audio)
                                     }
-                                    val details = listOf(best.audio, best.codec, best.container, sizeText(best.sizeBytes)).filter { it.isNotEmpty() }.joinToString("  ·  ")
-                                    if (details.isNotEmpty()) Text(details, color = Palette.Text, fontSize = 11.sp)
                                     if (versions.size > 1) {
-                                        Text("⧉ ${versions.size} copies · you choose when you play", color = Palette.Accent, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                                        Text("⧉ ${versions.size} copies · you choose when you play", color = Palette.Text, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                                     }
                                 } else if (ref.server == null) {
                                     Text("NOT ON YOUR SERVER", color = Palette.TextMuted, fontSize = 10.sp, letterSpacing = 1.2.sp)
@@ -474,16 +446,17 @@ fun TitleScreen(
                     val castIndex = n++
                     item {
                         Column(track(castIndex)) {
-                            SectionTitle("Cast")
+                            SectionTitle("Cast & Crew")
                             HRow(defaultSpec, spacing = 14.dp) {
                                 items(t.cast) { p ->
-                                    Column(Modifier.width(96.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Column(Modifier.width(92.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                         FocusBox(
                                             onClick = { onPerson(p) },
-                                            modifier = Modifier.width(96.dp).height(138.dp),
-                                            edge = UiSettings.posterBorder,
+                                            modifier = Modifier.size(84.dp),
+                                            shape = RoundedCornerShape(50),
+                                            edge = false,
                                         ) { _ ->
-                                            Box(Modifier.fillMaxSize().background(Palette.Accent.copy(alpha = 0.25f))) {
+                                            Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.18f))) {
                                                 if (p.photo != null) {
                                                     AsyncImage(model = p.photo, contentDescription = p.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                                                 } else {
@@ -495,8 +468,9 @@ fun TitleScreen(
                                                 }
                                             }
                                         }
-                                        Text(p.name, color = Palette.Text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        p.role?.let { Text(it, color = Palette.TextMuted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                                        Spacer(Modifier.height(3.dp))
+                                        Text(p.name, color = Palette.Text, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                                        p.role?.let { Text(it, color = Palette.TextMuted, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center) }
                                     }
                                 }
                             }
@@ -595,6 +569,17 @@ fun TitleScreen(
             )
         }
     }
+}
+
+@Composable
+private fun InfoPill(text: String, accent: Boolean = false) {
+    Text(
+        text, color = Palette.Text, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+        modifier = Modifier
+            .background(Color(0xB3000000), RoundedCornerShape(6.dp))
+            .border(1.dp, if (accent) Palette.Accent else Color(0x33FFFFFF), RoundedCornerShape(6.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    )
 }
 
 @Composable

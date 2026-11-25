@@ -1,6 +1,9 @@
 package com.fancyfin.tv.ui
 
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.draw.scale
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -100,6 +103,8 @@ class FeatureState {
     var allItems by mutableStateOf<List<Item>>(emptyList())
     var sortIndex by mutableStateOf(1)
     var wallpaper by mutableStateOf<String?>(null)
+    /** The title you are on, which the backdrop and the details at the top follow. */
+    var focused by mutableStateOf<HeroEntry?>(null)
     var loading by mutableStateOf(true)
     var failed by mutableStateOf(false)
     /** False until a full load finishes, and again when something (like playing a title) makes it stale. */
@@ -128,6 +133,11 @@ class GridSpec(
     val selected: Int,
     val onSelect: (Int) -> Unit,
 )
+
+/** How tall the details at the top of a browse page are; the rows start below it. */
+private val INFO_HEIGHT = 236.dp
+private val POSTER_W = 108.dp
+private val POSTER_H = 162.dp
 
 private val POPULAR_GENRES = listOf(
     "Action", "Comedy", "Drama", "Science Fiction", "Sci-Fi & Fantasy", "Thriller", "Horror", "Animation",
@@ -274,22 +284,23 @@ fun FeatureList(
         else e.onServer?.let { client.backdrop(it, 96) } ?: smallTmdb(e.backdrop)
 
     CompositionLocalProvider(LocalBringIntoViewSpec provides NoAutoScroll) {
+      Box(modifier.fillMaxSize().onFocusChanged { listFocused = it.hasFocus }) {
+        InfoBlock(state.focused, client, Modifier.align(Alignment.TopStart).height(INFO_HEIGHT))
         LazyColumn(
-            modifier.fillMaxSize().onFocusChanged { listFocused = it.hasFocus },
+            Modifier.fillMaxSize().padding(top = INFO_HEIGHT),
             state = columnState,
-            contentPadding = PaddingValues(top = 24.dp, bottom = 300.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(top = 0.dp, bottom = 300.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             itemsIndexed(sections) { si, section ->
                 Column {
                     Text(
-                        section.title, color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                        section.title, color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(start = 20.dp, bottom = 8.dp),
                     )
                     HeroRow(
                         entries = section.entries,
-                        mini = section.mini,
-                        expandedIndex = if (si == focusRow) selected[si] ?: 0 else null,
+                        focusIndex = if (si == focusRow) selected[si] ?: 0 else null,
                         listState = rowStates.getOrPut(si) { LazyListState() },
                         requesters = requesters.getOrPut(si) { HashMap() },
                         target = { selected[si] ?: 0 },
@@ -298,7 +309,10 @@ fun FeatureList(
                             focusRow = si
                             state.visited = true
                             val e = section.entries[i]
-                            if (!e.isMore) onWallpaper(wallpaperFor(e))
+                            if (!e.isMore) {
+                                onWallpaper(wallpaperFor(e))
+                                state.focused = e
+                            }
                             if (e.onServer == null && e.kind == "movie" && e.tmdbId != null && e.status == null) {
                                 scope.launch { e.status = client.releaseStatus(e.tmdbId) }
                             }
@@ -314,7 +328,7 @@ fun FeatureList(
                 item {
                     Column {
                         Text(
-                            "All titles", color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                            "All titles", color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(start = 20.dp, bottom = 8.dp),
                         )
                         Row(Modifier.padding(start = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -333,6 +347,7 @@ fun FeatureList(
                                 onFocused = {
                                     focusRow = base + 1 + r
                                     onWallpaper(client.backdrop(item, 96))
+                                    state.focused = itemEntry(item, client)
                                 },
                             )
                         }
@@ -340,6 +355,7 @@ fun FeatureList(
                 }
             }
         }
+      }
     }
 }
 
@@ -401,7 +417,10 @@ fun BrowseScreen(
             if (popular.isNotEmpty()) {
                 add(HeroSection(popularTitle, popular))
                 val first = popular.first()
-                if (fresh) wallpaper = if (first.backdrop?.contains("image.tmdb.org") == true) smallTmdb(first.backdrop) else first.onServer?.let { client.backdrop(it, 96) }
+                if (fresh) {
+                    wallpaper = if (first.backdrop?.contains("image.tmdb.org") == true) smallTmdb(first.backdrop) else first.onServer?.let { client.backdrop(it, 96) }
+                    state.focused = first
+                }
             }
             loading = false
 
@@ -435,7 +454,7 @@ fun BrowseScreen(
 
     Shell(tab, onTab, onSignOut) { contentModifier ->
         Box(Modifier.fillMaxSize()) {
-            Backdrop(wallpaper)
+            HeroBackdrop(state.focused)
             when {
                 failed -> Text("Couldn't reach your server.", color = Palette.Accent, fontSize = 14.sp, modifier = Modifier.padding(20.dp))
                 loading -> Text("Loading…", color = Palette.TextMuted, fontSize = 14.sp, modifier = Modifier.padding(20.dp))
@@ -518,7 +537,10 @@ fun GenreScreen(
             if (popularEntries.isNotEmpty()) {
                 add(HeroSection("Popular in $genre", popularEntries))
                 val first = popularEntries.first()
-                if (fresh) wallpaper = if (first.backdrop?.contains("image.tmdb.org") == true) smallTmdb(first.backdrop) else first.onServer?.let { client.backdrop(it, 96) }
+                if (fresh) {
+                    wallpaper = if (first.backdrop?.contains("image.tmdb.org") == true) smallTmdb(first.backdrop) else first.onServer?.let { client.backdrop(it, 96) }
+                    state.focused = first
+                }
             }
             loading = false
 
@@ -547,7 +569,7 @@ fun GenreScreen(
 
     Shell(tab, onTab, onSignOut) { contentModifier ->
         Box(Modifier.fillMaxSize()) {
-            Backdrop(wallpaper)
+            HeroBackdrop(state.focused)
             when {
                 failed -> Text("Couldn't reach your server.", color = Palette.Accent, fontSize = 14.sp, modifier = Modifier.padding(20.dp))
                 loading -> Text("Loading…", color = Palette.TextMuted, fontSize = 14.sp, modifier = Modifier.padding(20.dp))
@@ -590,16 +612,14 @@ fun GenreScreen(
 }
 
 /**
- * One row of tiles. The tile you are on is wide and shows everything; the rest are narrow posters that
- * open as you reach them. The row scrolls so the tile you are on has exactly one narrow tile before it.
- * Coming into the row from above or below lands on `target()`: the first tile, or where you left off.
+ * One row of posters. The row scrolls so the poster you are on has exactly one before it.
+ * Coming into the row from above or below lands on `target()`: the first poster, or where you left off.
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 @Composable
 private fun HeroRow(
     entries: List<HeroEntry>,
-    mini: Boolean,
-    expandedIndex: Int?,
+    focusIndex: Int?,
     listState: LazyListState,
     requesters: HashMap<Int, FocusRequester>,
     target: () -> Int,
@@ -607,8 +627,8 @@ private fun HeroRow(
     onClick: (HeroEntry) -> Unit,
     onLongClick: (HeroEntry) -> Unit,
 ) {
-    LaunchedEffect(expandedIndex) {
-        if (expandedIndex != null) listState.animateScrollToItem((expandedIndex - 1).coerceAtLeast(0))
+    LaunchedEffect(focusIndex) {
+        if (focusIndex != null) listState.animateScrollToItem((focusIndex - 1).coerceAtLeast(0))
     }
     CompositionLocalProvider(LocalBringIntoViewSpec provides NoAutoScroll) {
         LazyRow(
@@ -616,8 +636,8 @@ private fun HeroRow(
                 .focusProperties { enter = { requesters[target()] ?: FocusRequester.Default } }
                 .focusGroup(),
             state = listState,
-            horizontalArrangement = Arrangement.spacedBy(if (mini) 8.dp else 10.dp),
-            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp),
         ) {
             itemsIndexed(entries) { index, entry ->
                 val requester = remember { FocusRequester() }
@@ -625,10 +645,8 @@ private fun HeroRow(
                     requesters[index] = requester
                     onDispose { if (requesters[index] === requester) requesters.remove(index) }
                 }
-                HeroTile(
+                PosterCard(
                     entry = entry,
-                    mini = mini,
-                    expanded = index == expandedIndex && !entry.isMore,
                     focusRequester = requester,
                     onFocused = { onSelect(index) },
                     onClick = { onClick(entry) },
@@ -639,28 +657,25 @@ private fun HeroRow(
     }
 }
 
+/** A poster in a row: white edge and a little growth when you're on it, a tick when you've watched it. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun HeroTile(
+private fun PosterCard(
     entry: HeroEntry,
-    mini: Boolean,
-    expanded: Boolean,
     focusRequester: FocusRequester,
     onFocused: () -> Unit,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val narrow = if (mini) 100.dp else 118.dp
-    val wide = if (mini) 312.dp else 520.dp
-    val tall = if (mini) 150.dp else 250.dp
-    val width by animateDpAsState(if (expanded) wide else narrow, label = "heroWidth")
-    val shape = RoundedCornerShape(UiSettings.corner.tile.let { if (mini) it * 0.7f else it })
+    val grow by animateFloatAsState(if (focused) 1.07f else 1f, label = "posterGrow")
+    val shape = RoundedCornerShape(UiSettings.corner.tile.coerceAtMost(10.dp))
 
     Box(
         Modifier
-            .width(width)
-            .height(tall)
+            .width(POSTER_W)
+            .height(POSTER_H)
+            .scale(grow)
             .clip(shape)
             .then(
                 if (focused) Modifier.border(2.dp, Palette.Text, shape)
@@ -689,55 +704,20 @@ private fun HeroTile(
             return@Box
         }
 
-        val picture = if (expanded) entry.backdrop ?: entry.poster else entry.poster ?: entry.backdrop
+        val picture = entry.poster ?: entry.backdrop
         if (picture != null) {
             AsyncImage(model = picture, contentDescription = entry.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        } else {
+            Text(entry.title, color = Palette.TextMuted, fontSize = 11.sp, modifier = Modifier.align(Alignment.Center).padding(8.dp))
         }
-        if (expanded) {
+        if (entry.onServer == null) {
+            NotOnServerPill(Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp))
+        } else if (entry.onServer.played) {
             Box(
-                Modifier.fillMaxSize().background(
-                    Brush.horizontalGradient(0f to Color(0xF0000000), 0.6f to Color(0x99000000), 1f to Color(0x10000000)),
-                ),
-            )
-            val titleSize = if (mini) 16.sp else 26.sp
-            val small = if (mini) 10.sp else 12.sp
-            Column(
-                Modifier.fillMaxHeight().width(if (mini) 200.dp else 330.dp)
-                    .padding(start = if (mini) 12.dp else 20.dp, top = if (mini) 10.dp else 18.dp, bottom = if (mini) 10.dp else 18.dp),
-                verticalArrangement = Arrangement.Bottom,
-            ) {
-                val kindLabel = if (entry.kind == "movie") "MOVIE" else "SERIES"
-                val top = if (entry.onServer == null && entry.status != null) (if (mini) entry.status!!.uppercase() else kindLabel + "  ·  " + entry.status!!.uppercase()) else if (mini) null else kindLabel
-                if (top != null) Text(top, color = Palette.Accent, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(entry.title, color = Palette.Text, fontSize = titleSize, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                entry.subtitle?.let { Text(it, color = Palette.Text, fontSize = if (mini) 10.sp else 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                val facts = listOfNotNull(
-                    entry.year?.toString(),
-                    entry.rating?.let { "★ " + "%.1f".format(it) },
-                    entry.genres.takeIf { it.isNotEmpty() && !mini }?.joinToString(", "),
-                )
-                if (facts.isNotEmpty()) Text(facts.joinToString("   ·   "), color = Palette.TextMuted, fontSize = small, modifier = Modifier.padding(top = 3.dp))
-                entry.overview?.let {
-                    Text(it, color = Palette.TextMuted, fontSize = small, maxLines = if (mini) 2 else 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
-                }
-                val here = entry.onServer != null
-                val round = RoundedCornerShape(UiSettings.corner.button.coerceAtMost(if (mini) 11.dp else 15.dp))
-                val h = if (mini) 22.dp else 30.dp
-                val pad = if (mini) 10.dp else 16.dp
-                Box(
-                    Modifier.padding(top = if (mini) 6.dp else 10.dp).height(h)
-                        .background(if (here) Palette.Accent else Palette.GlassFillStrong, round)
-                        .padding(horizontal = pad),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        if (here) "▶  ${entry.action}" else "Not on your server",
-                        color = if (here) Color.Black else Palette.Text, fontSize = small, fontWeight = FontWeight.SemiBold,
-                    )
-                }
-            }
+                Modifier.align(Alignment.TopEnd).padding(5.dp).size(14.dp).background(Color(0xE6FFFFFF), RoundedCornerShape(50)),
+                contentAlignment = Alignment.Center,
+            ) { Text("✓", color = Color.Black, fontSize = 9.sp, fontWeight = FontWeight.Bold) }
         }
-        if (!expanded && entry.onServer == null) NotOnServerPill(Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp))
         entry.progress?.let { ProgressLine(it, Modifier.align(Alignment.BottomStart)) }
     }
 }
@@ -781,6 +761,7 @@ fun CollectionScreen(
             if (wallpaper == null) {
                 val first = popular.firstOrNull()
                 wallpaper = if (first?.backdrop?.contains("image.tmdb.org") == true) smallTmdb(first.backdrop) else first?.onServer?.let { client.backdrop(it, 96) }
+                state.focused = first
             }
         }
         build(owned)
@@ -811,7 +792,7 @@ fun CollectionScreen(
 
     Shell(Tab.Collections, onTab, onSignOut) { contentModifier ->
         Box(Modifier.fillMaxSize()) {
-            Backdrop(wallpaper)
+            HeroBackdrop(state.focused)
             if (loading) {
                 Text("Loading…", color = Palette.TextMuted, fontSize = 14.sp, modifier = Modifier.padding(20.dp))
             } else {

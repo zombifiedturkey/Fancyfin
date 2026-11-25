@@ -36,6 +36,7 @@ fun FancyfinApp() {
     remember { UiSettings.load(context); Pins.load(context) }
     val prefs = remember { Prefs(context) }
     val client = remember { JellyfinClient(prefs) }
+    androidx.compose.runtime.SideEffect { UserState.name = prefs.userName }
     var signedIn by remember { mutableStateOf(client.isSignedIn) }
     val stack = remember { mutableStateListOf<Route>(Route.Main(Tab.Home)) }
     val scope = rememberCoroutineScope()

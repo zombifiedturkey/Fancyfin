@@ -15,7 +15,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -187,4 +190,53 @@ fun NotOnServerPill(modifier: Modifier = Modifier) {
             .border(1.dp, Palette.GlassEdge, shape)
             .padding(horizontal = 7.dp, vertical = 2.dp),
     )
+}
+
+/** The big rounded button on a title page: solid white for the main action, frosted for the rest. */
+@Composable
+fun PillButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    solid: Boolean = false,
+) {
+    FocusBox(
+        onClick = onClick,
+        modifier = modifier.height(30.dp),
+        shape = RoundedCornerShape(50),
+        focusedScale = 1.06f,
+        edge = false,
+    ) { focused ->
+        val ink = if (solid) Color.Black else Palette.Text
+        Row(
+            Modifier.fillMaxHeight()
+                .background(if (solid) Color.White.copy(alpha = if (focused) 1f else 0.92f) else Color.White.copy(alpha = if (focused) 0.32f else 0.18f))
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (icon != null) Icon(icon, null, tint = ink, modifier = Modifier.size(14.dp))
+            Text(label, color = ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+/** A small round button with just an icon (favourite, watched). Filled white when it's switched on. */
+@Composable
+fun IconCircleButton(icon: ImageVector, on: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    FocusBox(
+        onClick = onClick,
+        modifier = modifier.size(30.dp),
+        shape = CircleShape,
+        focusedScale = 1.1f,
+        edge = false,
+    ) { focused ->
+        Box(
+            Modifier.fillMaxSize().background(if (on) Color.White else Color.White.copy(alpha = if (focused) 0.32f else 0.18f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, null, tint = if (on) Color.Black else Palette.Text, modifier = Modifier.size(15.dp))
+        }
+    }
 }
