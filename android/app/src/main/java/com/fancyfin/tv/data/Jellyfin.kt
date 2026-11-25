@@ -884,6 +884,14 @@ class JellyfinClient(private val prefs: Prefs) {
         return if (at >= 0 && at + 1 < all.size) all[at + 1] else null
     }
 
+    suspend fun previousEpisode(item: Item): Item? {
+        val seriesId = item.seriesId ?: return null
+        val all = items(get("/Shows/$seriesId/Episodes?UserId=$userId&Fields=$fields"))
+            .filter { (it.parentIndexNumber ?: 1) != 0 || item.parentIndexNumber == 0 }
+        val at = all.indexOfFirst { it.id == item.id }
+        return if (at > 0) all[at - 1] else null
+    }
+
     // ---- Radarr and Sonarr (through the Fancyfin container) -----------------------------------
 
     private fun arrPath(app: String, sub: String) = "/arr/$app/api/v3/$sub"

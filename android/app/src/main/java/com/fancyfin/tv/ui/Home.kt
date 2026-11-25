@@ -90,20 +90,22 @@ fun HeroBackdropUrl(url: String?) {
         Backdrop(null)
         return
     }
-    val ambient = rememberAmbient(smallTmdb(url))
-    Box(Modifier.fillMaxSize().background(Palette.Background)) {
+    val accent = Palette.Accent
+    val deep = androidx.compose.ui.graphics.lerp(Palette.Background, accent, 0.45f)
+    Box(Modifier.fillMaxSize().background(deep)) {
         Crossfade(targetState = url, label = "hero") { target ->
             AsyncImage(model = target, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
-        // The colour wash: strong behind the text on the left, gone by the right edge.
+        // Solid picture in the top right corner, fading diagonally into the accent colour toward the bottom left.
         Box(
             Modifier.fillMaxSize().background(
-                Brush.horizontalGradient(
-                    0f to ambient.copy(alpha = 0.94f),
-                    0.28f to ambient.copy(alpha = 0.76f),
-                    0.55f to ambient.copy(alpha = 0.18f),
-                    0.78f to Color.Transparent,
-                    1f to Color.Transparent,
+                Brush.linearGradient(
+                    0f to Color.Transparent,
+                    0.3f to Color.Transparent,
+                    0.62f to deep.copy(alpha = 0.78f),
+                    1f to deep.copy(alpha = 0.97f),
+                    start = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, 0f),
+                    end = androidx.compose.ui.geometry.Offset(0f, Float.POSITIVE_INFINITY),
                 ),
             ),
         )
@@ -111,8 +113,8 @@ fun HeroBackdropUrl(url: String?) {
         Box(
             Modifier.fillMaxSize().background(
                 Brush.verticalGradient(
-                    0.62f to Color.Transparent,
-                    1f to androidx.compose.ui.graphics.lerp(Color.Black, ambient, 0.3f).copy(alpha = 0.92f),
+                    0.7f to Color.Transparent,
+                    1f to Color.Black.copy(alpha = 0.5f),
                 ),
             ),
         )

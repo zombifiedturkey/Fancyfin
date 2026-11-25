@@ -187,7 +187,7 @@ private fun Thumbnail(url: String, tileW: Int, tileH: Int, col: Int, row: Int, w
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun TrackMenu(player: ExoPlayer, tick: Int, onClose: () -> Unit) {
+private fun TrackMenu(player: ExoPlayer, tick: Int, prevEp: Item?, nextEp: Item?, onEpisode: (Item) -> Unit, onClose: () -> Unit) {
     BackHandler { onClose() }
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) {
@@ -268,6 +268,10 @@ private fun TrackMenu(player: ExoPlayer, tick: Int, onClose: () -> Unit) {
             }
             column("AUDIO", audio, lead = true)
             column("SUBTITLES", text, lead = audio.isEmpty())
+            val episodes = ArrayList<Entry>()
+            prevEp?.let { e -> episodes.add(Entry("◀ Previous: " + listOfNotNull(e.episodeLabel, e.name).joinToString(" · "), false) { onEpisode(e) }) }
+            nextEp?.let { e -> episodes.add(Entry("Next: " + listOfNotNull(e.episodeLabel, e.name).joinToString(" · ") + " ▶", false) { onEpisode(e) }) }
+            if (episodes.isNotEmpty()) column("EPISODE", episodes, lead = false)
         }
     }
 }
@@ -284,6 +288,10 @@ fun PlayerScreen(item: Item, client: JellyfinClient, sourceId: String?, maxHeigh
     LaunchedEffect(item.id) {
         media = try { client.mediaInfo(item.id, sourceId) } catch (e: Exception) { MediaInfo() }
     }
+    var prevEp by remember(item.id) { mutableStateOf<Item?>(null) }
+    LaunchedEffect(item.id) {
+        if (item.isEpisode) prevEp = try { client.previousEpisode(item) } catch (e: Exception) { null }
+    }
     LaunchedEffect(item.id) {
         if (item.isEpisode) nextEp = try { client.nextEpisode(item) } catch (e: Exception) { null }
     }
@@ -294,7 +302,7 @@ fun PlayerScreen(item: Item, client: JellyfinClient, sourceId: String?, maxHeigh
             Text("Loading…", color = Palette.TextMuted, fontSize = 14.sp)
         }
     } else {
-        PlayerBody(item, client, sourceId, maxHeight, loaded, nextEp, onDone, onNext)
+        PlayerBody(item, client, sourceId, maxHeight, loaded, nextEp, prevEp, onDone, onNext)
     }
 }
 
@@ -307,6 +315,7 @@ private fun PlayerBody(
     maxHeight: Int?,
     media: MediaInfo,
     nextEp: Item?,
+    prevEp: Item?,
     onDone: () -> Unit,
     onNext: (Item) -> Unit,
 ) {
@@ -556,8 +565,8 @@ private fun PlayerBody(
                     }
                     Key.DirectionUp -> if (!controls) controls = true else menuOpen = true
                     Key.DirectionDown -> controls = false
-                    Key.MediaNext -> if (media.chapters.isNotEmpty()) chapterJump(true) else nextEp?.let { onNext(it) }
-                    Key.MediaPrevious -> chapterJump(false)
+                    Key.MediaNext -> if (nextEp != null) onNext(nextEp) else chapterJump(true)
+                    Key.MediaPrevious -> if (prevEp != null && position < 8_000) onNext(prevEp) else if (media.chapters.isNotEmpty()) chapterJump(false) else player.seekTo(0)
                     else -> return@onPreviewKeyEvent false
                 }
                 true
@@ -595,6 +604,10 @@ private fun PlayerBody(
                     .background(Color(0x99000000), RoundedCornerShape(8.dp))
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             )
+        }
+
+        AnimatedVisibility(visible = controls, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.TopEnd)) {
+            ClockPill(Modifier.padding(top = 14.dp, end = 20.dp))
         }
 
         // The control bar: title, times, seek bar with chapter ticks, and a preview frame while scrubbing.
@@ -655,7 +668,7 @@ private fun PlayerBody(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(chapter?.name ?: "", color = Palette.TextMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(300.dp))
                     Text(
-                        "◀ ▶ Seek      ▲ Audio and subtitles      OK Pause" + if (media.chapters.isNotEmpty()) "      ⏮ ⏭ Chapters" else "",
+                        "◀ ▶ Seek      ▲ Audio, subtitles and episodes      OK Pause" + if (nextEp != null || prevEp != null) "      ⏮ ⏭ Episodes" else if (media.chapters.isNotEmpty()) "      ⏮ ⏭ Chapters" else "",
                         color = Palette.TextMuted, fontSize = 11.sp,
                     )
                 }
@@ -693,6 +706,6 @@ private fun PlayerBody(
             }
         }
 
-        if (menuOpen) TrackMenu(player, tracksTick) { menuOpen = false }
+        if (menuOpen) TrackMenu(player, tracksTick, prevEp, nextEp, { onNext(it) }) { menuOpen = false }
     }
 }
