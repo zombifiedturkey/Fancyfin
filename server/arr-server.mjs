@@ -58,7 +58,7 @@ function onlyParams(search, names) {
 	const params = new URLSearchParams(search);
 	for (const [key, value] of params) {
 		const check = names[key];
-		if (!check || !check.test(value)) return false;
+		if (!check?.test(value)) return false;
 	}
 	return true;
 }
@@ -108,9 +108,7 @@ export function allowedCall(app, method, sub, search = "") {
 		].includes(sub);
 	}
 	if (method === "POST") {
-		return [`api/v3/${kind}`, "api/v3/command", "api/v3/release"].includes(
-			sub,
-		);
+		return [`api/v3/${kind}`, "api/v3/command", "api/v3/release"].includes(sub);
 	}
 	if (method === "PUT") return one.test(sub) && search === "";
 	if (method === "DELETE") {

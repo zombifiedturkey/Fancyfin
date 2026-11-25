@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+
 package com.fancyfin.tv.ui
 
 import androidx.activity.compose.BackHandler
