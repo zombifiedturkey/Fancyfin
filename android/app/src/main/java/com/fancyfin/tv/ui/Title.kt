@@ -332,8 +332,13 @@ fun TitleScreen(
                 Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     val facts = listOfNotNull(year?.toString(), runtimeText(minutes), genres.take(3).takeIf { it.isNotEmpty() }?.joinToString(", "))
                     if (facts.isNotEmpty()) Text(facts.joinToString("   "), color = Palette.Text, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-                    shown?.officialRating?.let { Chip(it) }
-                    rating?.let { Chip("★ " + "%.1f".format(it)) }
+                    shown?.officialRating?.let {
+                        Text(
+                            it, color = Palette.Text, fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.background(Color(0x33FFFFFF), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 1.dp),
+                        )
+                    }
+                    rating?.let { Text("★ " + "%.1f".format(it), color = Palette.Text, fontSize = 10.sp, fontWeight = FontWeight.SemiBold) }
                 }
                 overview?.let { Text(it, color = Palette.Text, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp).width(520.dp)) }
             }
