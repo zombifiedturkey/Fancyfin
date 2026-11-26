@@ -36,6 +36,8 @@ data class Item(
     val tmdbId: String?,
     /** Other copies of the same movie or show on the server (other folders), folded into this one. */
     val duplicateIds: List<String> = emptyList(),
+    /** When it first aired or came out, as "yyyy-mm-dd". */
+    val premiere: String? = null,
 ) {
     val isEpisode: Boolean get() = type == "Episode"
     val isSeries: Boolean get() = type == "Series"
@@ -109,6 +111,7 @@ fun parseItem(o: JSONObject): Item {
         unplayedCount = user?.intOrNull("UnplayedItemCount"),
         childCount = o.intOrNull("ChildCount"),
         tmdbId = o.optJSONObject("ProviderIds")?.str("Tmdb"),
+        premiere = o.str("PremiereDate")?.take(10),
     )
 }
 
@@ -261,4 +264,15 @@ fun consolidate(items: List<Item>): List<Item> {
             rep.copy(duplicateIds = group.filter { it.id != rep.id }.map { it.id })
         }
     }
+}
+
+/** "31 May 2019" from "2019-05-31", or null when it isn't a date. */
+fun airDateText(premiere: String?): String? {
+    val p = premiere?.split("-") ?: return null
+    if (p.size < 3) return null
+    val y = p[0].toIntOrNull() ?: return null
+    val mo = p[1].toIntOrNull()?.takeIf { it in 1..12 } ?: return null
+    val d = p[2].toIntOrNull() ?: return null
+    val names = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+    return "$d ${names[mo - 1]} $y"
 }

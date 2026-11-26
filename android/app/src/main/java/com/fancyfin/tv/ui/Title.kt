@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.fancyfin.tv.data.Discover
+import com.fancyfin.tv.data.airDateText
 import com.fancyfin.tv.data.Item
 import com.fancyfin.tv.data.JellyfinClient
 import com.fancyfin.tv.data.MediaVersion
@@ -330,7 +331,7 @@ fun TitleScreen(
                 }
                 tagline?.let { Text(it, color = Palette.Text, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp)) }
                 Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    val facts = listOfNotNull(year?.toString(), runtimeText(minutes), genres.take(3).takeIf { it.isNotEmpty() }?.joinToString(", "))
+                    val facts = listOfNotNull(ep?.let { airDateText(it.premiere) } ?: year?.toString(), runtimeText(minutes), genres.take(3).takeIf { it.isNotEmpty() }?.joinToString(", "))
                     if (facts.isNotEmpty()) Text(facts.joinToString("   "), color = Palette.Text, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                     shown?.officialRating?.let {
                         Text(

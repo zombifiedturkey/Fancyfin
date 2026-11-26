@@ -264,7 +264,7 @@ class JellyfinClient(private val prefs: Prefs) {
 
     // ---- Browsing ----------------------------------------------------------------------------
 
-    private val fields = "Overview,Taglines,Genres,ParentBackdropItemId,ParentBackdropImageTags,ParentLogoItemId,ParentLogoImageTag,ProviderIds"
+    private val fields = "Overview,Taglines,PremiereDate,Genres,ParentBackdropItemId,ParentBackdropImageTags,ParentLogoItemId,ParentLogoImageTag,ProviderIds"
 
     private fun items(json: String): List<Item> {
         val trimmed = json.trim()
