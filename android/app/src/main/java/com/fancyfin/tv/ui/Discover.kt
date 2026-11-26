@@ -66,7 +66,7 @@ class DiscoverState {
     var focused by mutableStateOf<HeroEntry?>(null)
     var loadedKey: String? = null
     var genres by mutableStateOf<List<String>>(emptyList())
-    var genresFor: String? = null
+    var genresFor by mutableStateOf<String?>(null)
     var owned: Map<String, Item> = emptyMap()
     val listState = LazyListState()
     var focusRow by mutableStateOf(0)
