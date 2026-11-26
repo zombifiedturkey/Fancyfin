@@ -152,8 +152,8 @@ class GridSpec(
  * The poster rows live in a window at the bottom of the screen that shows exactly one row (so nothing of the
  * next row peeks in) and the details sit still above it. Down in the grid of everything the window grows.
  */
-private val ROW_VIEW_H = 270.dp
-private val VIEW_HEADROOM = 12.dp
+internal val ROW_VIEW_H = 270.dp
+internal val VIEW_HEADROOM = 12.dp
 private val POSTER_W = 128.dp
 private val POSTER_H = 192.dp
 
@@ -456,9 +456,9 @@ fun FeatureList(
                         )
                     }
                 }
-                LazyColumn(Modifier.fillMaxWidth().weight(1f), state = columnState, contentPadding = PaddingValues(top = VIEW_HEADROOM)) {
+                LazyColumn(Modifier.fillMaxWidth().weight(1f), state = columnState) {
                     itemsIndexed(shownItems.chunked(9)) { r, chunk ->
-                        Row(Modifier.padding(start = 20.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(Modifier.padding(start = 20.dp, top = 6.dp, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             chunk.forEach { item ->
                                 ItemCard(
                                     item = item, client = client, width = 92.dp, height = 138.dp, landscape = false,

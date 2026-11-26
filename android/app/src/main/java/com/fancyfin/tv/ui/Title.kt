@@ -1,6 +1,15 @@
 package com.fancyfin.tv.ui
 
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -96,7 +105,7 @@ private fun runtimeText(minutes: Int): String? =
 private fun SectionTitle(text: String) {
     Text(
         text, color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(start = 24.dp, bottom = 8.dp),
+        modifier = Modifier.padding(start = 20.dp, bottom = 6.dp),
     )
 }
 
@@ -265,69 +274,96 @@ fun TitleScreen(
     val posterUrl = shown?.let { client.poster(it, 342) } ?: t?.poster ?: ref.poster
     val trailers = t?.let { trailerKeys(it.videos) } ?: emptyList()
 
-    // Pages open at the top, with the cast row at the bottom of the screen. Going down from the buttons to
-    // the cast doesn't scroll; going further down scrolls the next row to the top; coming back up to the
-    // cast (or above) goes back to the very top.
+    // One screen, laid out like the browse pages: the title, facts and description sit exactly where they do
+    // there, the buttons slot in under them, and the cast, episodes and "more like this" rows take the place
+    // of the poster row. Only one of those rows is on show at a time; moving between them fades in place.
     val defaultSpec = LocalBringIntoViewSpec.current
-    val listState = rememberLazyListState()
-    var focusItem by remember { mutableStateOf(0) }
     val hasSeasons = shown != null && shown.isSeries && seasons.isNotEmpty()
     val hasCast = t != null && t.cast.isNotEmpty()
-    // The anchor for the home state: the episodes for a show on your server, the cast otherwise.
-    val episodeAnchor = shown != null && shown.isSeries
-    val topLimit = 1 + (if (hasSeasons) 2 else 0) + (if (!episodeAnchor && hasCast) 1 else 0)
-    LaunchedEffect(focusItem, topLimit) {
-        listState.animateScrollToItem(if (focusItem <= topLimit) 0 else focusItem)
+    val moreTmdb = t?.more ?: emptyList()
+    val extras = t?.videos ?: emptyList()
+    val keys = buildList {
+        if (hasSeasons) add("eps")
+        if (hasCast) add("cast")
+        if (franchise.size > 1) add("franchise")
+        if (moreTmdb.isNotEmpty() || serverSimilar.isNotEmpty()) add("more")
+        if (extras.isNotEmpty()) add("extras")
     }
-    // Leaving the episodes row (index 3 on a show) brings the show's own description back.
-    LaunchedEffect(focusItem) { if (focusItem != 3) focusedEp = null }
-    val track: (Int) -> Modifier = { i -> Modifier.onFocusChanged { if (it.hasFocus) focusItem = i } }
+    // -1 is the buttons; 0.. is a row in keys.
+    var row by remember { mutableStateOf(-1) }
+    var pillFocused by remember { mutableStateOf(false) }
+    val sectionReq = remember { List(6) { FocusRequester() } }
+    val episodesReq = remember { FocusRequester() }
+    val rowShown = row.coerceIn(0, (keys.size - 1).coerceAtLeast(0))
+    LaunchedEffect(row, keys) { if (keys.getOrNull(row) != "eps") focusedEp = null }
+    fun goSection(n: Int) {
+        row = n
+        scope.launch {
+            delay(40)
+            try { (if (keys.getOrNull(n) == "eps") episodesReq else sectionReq[n]).requestFocus() } catch (e: Exception) { /* not laid out yet */ }
+        }
+    }
+    fun goButtons() {
+        scope.launch { try { first.requestFocus() } catch (e: Exception) { /* not laid out yet */ } }
+    }
     val best = versions.maxWithOrNull(compareBy<MediaVersion>({ resolutionHeight(it) }, { rangeRank(it) }, { it.sizeBytes }))
 
-    Box(Modifier.fillMaxSize()) {
-        // The movie's picture fills the screen, washed with its own colour from the left.
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        // The movie's picture fills the screen, washed with the background colour.
         HeroBackdropUrl(hero)
         ClockPill(Modifier.align(Alignment.TopEnd).padding(top = 14.dp, end = 20.dp))
 
         CompositionLocalProvider(LocalBringIntoViewSpec provides NoAutoScroll) {
-            LazyColumn(
-                Modifier.fillMaxSize(),
-                state = listState,
-                contentPadding = PaddingValues(top = 56.dp, bottom = 300.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+            // Same spot and sizes as the browse pages' info block.
+            Column(
+                Modifier.align(Alignment.TopStart).fillMaxWidth().height((maxHeight - ROW_VIEW_H).coerceAtLeast(120.dp)).padding(start = 20.dp, end = 60.dp, bottom = 10.dp),
+                verticalArrangement = Arrangement.Bottom,
             ) {
-                var n = 0
-
-                // Home state: the movie's picture fills the top of the screen, with the poster and details,
-                // the buttons and the cast sitting low down.
-                val headerIndex = n++
-                item {
-                    Column(Modifier.padding(horizontal = 24.dp).then(track(headerIndex)), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        val logo = shown?.let { client.logo(it) }
-                        if (logo != null) {
-                            AsyncImage(
-                                model = logo, contentDescription = title, contentScale = ContentScale.Fit,
-                                alignment = Alignment.CenterStart, modifier = Modifier.height(72.dp).width(320.dp),
-                            )
-                        } else {
-                            Text(title, color = Palette.Text, fontSize = 32.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(560.dp))
-                        }
-                        tagline?.let { Text(it, color = Palette.Text, fontSize = 12.sp, fontStyle = FontStyle.Italic, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            val facts = listOfNotNull(year?.toString(), runtimeText(minutes), genres.take(3).takeIf { it.isNotEmpty() }?.joinToString(", "))
-                            if (facts.isNotEmpty()) Text(facts.joinToString("   "), color = Palette.Text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                            shown?.officialRating?.let { Chip(it) }
-                            rating?.let { Chip("★ " + "%.1f".format(it)) }
-                        }
-                        overview?.let { Text(it, color = Palette.Text, fontSize = 12.sp, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(560.dp)) }
-                    }
+                val logo = shown?.let { client.logo(it) }
+                if (logo != null) {
+                    AsyncImage(
+                        model = logo, contentDescription = title, contentScale = ContentScale.Fit,
+                        alignment = Alignment.CenterStart, modifier = Modifier.height(64.dp).width(280.dp),
+                    )
+                } else {
+                    Text(title, color = Palette.Text, fontSize = 30.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(520.dp))
                 }
+                tagline?.let { Text(it, color = Palette.Text, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp)) }
+                Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val facts = listOfNotNull(year?.toString(), runtimeText(minutes), genres.take(3).takeIf { it.isNotEmpty() }?.joinToString(", "))
+                    if (facts.isNotEmpty()) Text(facts.joinToString("   "), color = Palette.Text, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                    shown?.officialRating?.let { Chip(it) }
+                    rating?.let { Chip("★ " + "%.1f".format(it)) }
+                }
+                overview?.let { Text(it, color = Palette.Text, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp).width(520.dp)) }
+            }
 
+            Column(
+                Modifier.align(Alignment.BottomStart).fillMaxWidth().height(ROW_VIEW_H)
+                    .onPreviewKeyEvent { ev ->
+                        if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        val last = keys.size - 1
+                        when (ev.key) {
+                            Key.DirectionDown -> when {
+                                row < 0 -> { if (last >= 0) goSection(0); true }
+                                keys.getOrNull(row) == "eps" && pillFocused -> false
+                                row < last -> { goSection(row + 1); true }
+                                else -> true
+                            }
+                            Key.DirectionUp -> when {
+                                row < 0 -> true
+                                keys.getOrNull(row) == "eps" && !pillFocused -> false
+                                row == 0 -> { row = -1; goButtons(); true }
+                                else -> { goSection(row - 1); true }
+                            }
+                            else -> false
+                        }
+                    },
+            ) {
                 // Buttons on the left; on the right, how it will look and sound (or when it's out).
-                val buttonsIndex = n++
-                item {
+                Box(Modifier.padding(top = 12.dp, bottom = 8.dp).onFocusChanged { if (it.hasFocus) row = -1 }) {
                     Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 24.dp).then(track(buttonsIndex)),
+                        Modifier.fillMaxWidth().padding(start = 20.dp, end = 24.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -423,35 +459,35 @@ fun TitleScreen(
                         }
                     }
                 }
-
-                if (hasSeasons) {
-                    val seasonsIndex = n++
-                    item {
-                        HRow(defaultSpec, spacing = 8.dp, vertical = 0.dp, modifier = track(seasonsIndex)) {
-                            items(seasons) { s -> GlassButton(s.name, onClick = { season = s }, primary = s.id == season?.id, compact = true) }
-                        }
-                    }
-                    val episodesIndex = n++
-                    item {
-                        HRow(defaultSpec, vertical = 8.dp, modifier = track(episodesIndex)) {
-                            items(episodes) { ep ->
-                                Column(Modifier.width(240.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    ItemCard(ep, client, 240.dp, 135.dp, true, onClick = { onPlay(ep) }, onFocused = { focusedEp = ep })
-                                    Text(
-                                        (ep.indexNumber?.let { "$it. " } ?: "") + ep.name,
-                                        color = Palette.Text, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                                    )
+                Box(Modifier.fillMaxWidth().weight(1f).clipToBounds()) {
+                    keys.forEachIndexed { si, key ->
+                        val current = si == rowShown
+                        val fade by animateFloatAsState(if (current) 1f else 0f, tween(260), label = "titleRowFade")
+                        Box(
+                            Modifier.fillMaxSize()
+                                .offset(y = if (current || fade > 0.01f) 0.dp else (-4000).dp)
+                                .graphicsLayer { alpha = fade }
+                                .onFocusChanged { if (it.hasFocus) row = si },
+                        ) {
+                            when (key) {
+                                "eps" -> Column {
+                                    HRow(defaultSpec, spacing = 8.dp, vertical = 0.dp, modifier = Modifier.onFocusChanged { pillFocused = it.hasFocus }) {
+                                        items(seasons) { s -> GlassButton(s.name, onClick = { season = s }, primary = s.id == season?.id, compact = true) }
+                                    }
+                                    HRow(defaultSpec, vertical = 8.dp, modifier = Modifier.focusRequester(episodesReq)) {
+                                        items(episodes) { ep ->
+                                            Column(Modifier.width(200.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                                ItemCard(ep, client, 200.dp, 112.dp, true, onClick = { onPlay(ep) }, onFocused = { focusedEp = ep })
+                                                Text(
+                                                    (ep.indexNumber?.let { "$it. " } ?: "") + ep.name,
+                                                    color = Palette.Text, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
-                            }
-                        }
-                    }
-                }
-
-                if (t != null && hasCast) {
-                    val castIndex = n++
-                    item {
-                        Column(track(castIndex)) {
-                            SectionTitle("Cast & Crew")
+                                "cast" -> Column(Modifier.focusRequester(sectionReq[si])) {
+                                    SectionTitle("Cast & Crew")
                             HRow(defaultSpec, spacing = 14.dp) {
                                 items(t.cast) { p ->
                                     Column(Modifier.width(92.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -479,18 +515,13 @@ fun TitleScreen(
                                     }
                                 }
                             }
-                        }
-                    }
-                }
-
-                if (franchise.size > 1) {
-                    val franchiseIndex = n++
-                    item {
-                        val position = franchise.indexOfFirst { it.tmdbId == tmdbId }
-                        Column(track(franchiseIndex)) {
-                            SectionTitle(
-                                (t?.collectionName ?: "Franchise") + if (position >= 0) "   ·   This is part ${position + 1} of ${franchise.size}" else "",
-                            )
+                                }
+                                "franchise" -> {
+                                    val position = franchise.indexOfFirst { it.tmdbId == tmdbId }
+                                    Column(Modifier.focusRequester(sectionReq[si])) {
+                                        SectionTitle(
+                                            (t?.collectionName ?: "Franchise") + if (position >= 0) "   ·   This is part ${position + 1} of ${franchise.size}" else "",
+                                        )
                             HRow(defaultSpec) {
                                 items(franchise) { part ->
                                     val here = index["movie:${part.tmdbId}"]
@@ -503,16 +534,10 @@ fun TitleScreen(
                                     )
                                 }
                             }
-                        }
-                    }
-                }
-
-                val moreTmdb = t?.more ?: emptyList()
-                if (moreTmdb.isNotEmpty() || serverSimilar.isNotEmpty()) {
-                    val moreIndex = n++
-                    item {
-                        Column(track(moreIndex)) {
-                            SectionTitle("More like this")
+                                    }
+                                }
+                                "more" -> Column(Modifier.focusRequester(sectionReq[si])) {
+                                    SectionTitle("More like this")
                             HRow(defaultSpec) {
                                 if (moreTmdb.isNotEmpty()) {
                                     items(moreTmdb) { d ->
@@ -526,16 +551,9 @@ fun TitleScreen(
                                     items(serverSimilar) { sim -> ItemCard(sim, client, 100.dp, 150.dp, false, onClick = { onOpen(TitleRef.of(sim)) }) }
                                 }
                             }
-                        }
-                    }
-                }
-
-                val extras = t?.videos ?: emptyList()
-                if (extras.isNotEmpty()) {
-                    val extrasIndex = n++
-                    item {
-                        Column(track(extrasIndex)) {
-                            SectionTitle("Trailers and extras")
+                                }
+                                "extras" -> Column(Modifier.focusRequester(sectionReq[si])) {
+                                    SectionTitle("Trailers and extras")
                             HRow(defaultSpec) {
                                 items(extras) { v ->
                                     Column(Modifier.width(176.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -551,6 +569,8 @@ fun TitleScreen(
                                         Text(v.type.uppercase(), color = Palette.Accent, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                                         Text(v.name, color = Palette.Text, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                     }
+                                }
+                            }
                                 }
                             }
                         }
@@ -622,7 +642,7 @@ private fun HRow(
         LazyRow(
             modifier = modifier,
             horizontalArrangement = Arrangement.spacedBy(spacing),
-            contentPadding = PaddingValues(horizontal = 24.dp, vertical = vertical),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = vertical),
             content = content,
         )
     }
