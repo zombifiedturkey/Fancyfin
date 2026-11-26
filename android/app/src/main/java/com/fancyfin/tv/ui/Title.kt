@@ -489,7 +489,7 @@ fun TitleScreen(
                                 "cast" -> Column(Modifier.focusRequester(sectionReq[si])) {
                                     SectionTitle("Cast & Crew")
                             HRow(defaultSpec, spacing = 14.dp) {
-                                items(t.cast) { p ->
+                                items(t?.cast ?: emptyList()) { p ->
                                     Column(Modifier.width(92.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                         FocusBox(
                                             onClick = { onPerson(p) },
