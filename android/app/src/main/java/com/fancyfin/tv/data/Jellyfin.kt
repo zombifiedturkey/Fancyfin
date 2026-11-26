@@ -342,6 +342,7 @@ class JellyfinClient(private val prefs: Prefs) {
 
     private var genreNames: Map<String, String>? = null
     private var genreIds: Map<String, Map<String, Int>>? = null
+    private var genreLists: Map<String, List<String>>? = null
 
     private fun tmdbImage(path: String?, size: String): String? =
         if (path.isNullOrEmpty()) null else "https://image.tmdb.org/t/p/$size$path"
@@ -351,8 +352,10 @@ class JellyfinClient(private val prefs: Prefs) {
         if (genreNames != null) return
         val names = HashMap<String, String>()
         val ids = HashMap<String, Map<String, Int>>()
+        val lists = HashMap<String, List<String>>()
         for (k in listOf("movie", "tv")) {
             val byName = HashMap<String, Int>()
+            val display = ArrayList<String>()
             try {
                 val genres = JSONObject(request(fancyfin, "/tmdb/genre/$k/list")).optJSONArray("genres")
                 if (genres != null) {
@@ -360,15 +363,18 @@ class JellyfinClient(private val prefs: Prefs) {
                         val g = genres.getJSONObject(i)
                         names[g.getInt("id").toString()] = g.getString("name")
                         byName[g.getString("name").lowercase()] = g.getInt("id")
+                        display.add(g.getString("name"))
                     }
                 }
             } catch (e: Exception) {
                 // Names are a nicety.
             }
             ids[k] = byName
+            lists[k] = display
         }
         genreNames = names
         genreIds = ids
+        genreLists = lists
     }
 
     private fun parseTmdb(results: JSONArray, defaultKind: String): List<Discover> {
@@ -411,6 +417,47 @@ class JellyfinClient(private val prefs: Prefs) {
         parseTmdb(JSONObject(body).optJSONArray("results") ?: return@withContext emptyList(), if (kind == "tv") "tv" else "movie")
     }
 
+
+    /** TMDB's genre names for movies or shows, in its own order. */
+    suspend fun discoverGenres(kind: String): List<String> = withContext(Dispatchers.IO) {
+        loadGenres()
+        genreLists?.get(kind) ?: emptyList()
+    }
+
+    /**
+     * The best rated movies or shows on TMDB, up to 100, for a genre and/or a decade (the decade's first year,
+     * like 1990). Null when TMDB isn't set up in Fancyfin. Needs a fair number of votes so obscure titles with a
+     * handful of perfect scores don't win.
+     */
+    suspend fun topRated(kind: String, genre: String?, decade: Int?): List<Discover>? = withContext(Dispatchers.IO) {
+        loadGenres()
+        val filtered = genre != null || decade != null
+        val votes = if (kind == "movie") (if (filtered) 300 else 1500) else (if (filtered) 100 else 500)
+        val query = StringBuilder("sort_by=vote_average.desc&include_adult=false&vote_count.gte=$votes")
+        val genreId = genre?.let { genreIds?.get(kind)?.get(it.lowercase()) }
+        if (genreId != null) query.append("&with_genres=").append(genreId)
+        if (decade != null) {
+            val field = if (kind == "movie") "primary_release_date" else "first_air_date"
+            query.append("&$field.gte=$decade-01-01&$field.lte=${decade + 9}-12-31")
+        }
+        val pages = (1..5).map { p ->
+            async {
+                try {
+                    request(fancyfin, "/tmdb/discover/$kind?$query&page=$p")
+                } catch (e: ApiException) {
+                    if (e.code == 404) "notset" else null
+                }
+            }
+        }.awaitAll()
+        if (pages.any { it == "notset" }) return@withContext null
+        val seen = HashSet<Int>()
+        val out = ArrayList<Discover>()
+        for (body in pages) {
+            val results = body?.let { try { JSONObject(it).optJSONArray("results") } catch (e: Exception) { null } } ?: continue
+            for (d in parseTmdb(results, kind)) if (seen.add(d.tmdbId)) out.add(d)
+        }
+        out.take(100)
+    }
 
     /** A video from TMDB (always YouTube here): a trailer, teaser, clip, featurette or behind the scenes. */
     suspend fun videos(kind: String, tmdbId: Int): List<Video> = withContext(Dispatchers.IO) {

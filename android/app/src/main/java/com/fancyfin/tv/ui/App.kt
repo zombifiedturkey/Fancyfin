@@ -48,6 +48,7 @@ fun FancyfinApp() {
     val screens = remember { HashMap<String, FeatureState>() }
     val collections = remember { CollectionsState() }
     val searchState = remember { SearchState() }
+    val discover = remember { DiscoverState() }
     var choice by remember { mutableStateOf<Pair<Item, List<MediaVersion>>?>(null) }
 
     TvScale {
@@ -144,6 +145,7 @@ fun FancyfinApp() {
                 is Route.Main -> when (route.tab) {
                     Tab.Home, Tab.Movies, Tab.Shows -> BrowseScreen(route.tab, screens.getOrPut("tab:${route.tab}") { FeatureState() }, client, open, play, openGenre, openTitle, goTab, signOut)
                     Tab.Search -> SearchScreen(searchState, client, open, goTab, signOut)
+                    Tab.Discover -> DiscoverScreen(discover, client, openTitle, goTab, signOut)
                     Tab.Collections -> CollectionsScreen(client, collections, { stack.add(Route.Collection(it)) }, goTab, signOut)
                     Tab.Settings -> SettingsScreen(client, goTab, signOut)
                     Tab.Downloads -> DownloadsScreen(client, goTab, signOut)

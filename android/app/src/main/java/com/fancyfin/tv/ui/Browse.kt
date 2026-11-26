@@ -915,7 +915,7 @@ private fun posterAlpha(distance: Int): Float = when (distance) {
 
 /** A rounded glass button for the sort choices and the genre picker; the chosen one is filled with the accent colour. */
 @Composable
-private fun SortPill(label: String, on: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, onFocused: () -> Unit = {}) {
+internal fun SortPill(label: String, on: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, onFocused: () -> Unit = {}) {
     FocusBox(
         onClick = onClick,
         onFocused = onFocused,

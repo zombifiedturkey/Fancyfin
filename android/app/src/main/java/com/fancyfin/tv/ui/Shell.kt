@@ -3,6 +3,7 @@ package com.fancyfin.tv.ui
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PlayArrow
@@ -85,6 +86,7 @@ enum class Tab(val label: String, val section: String, val inMenu: Boolean = tru
     Movies("Movies", "Browse"),
     Shows("TV Shows", "Browse"),
     Collections("Collections", "Browse"),
+    Discover("Discover", "Browse"),
     // Still reachable in code, no longer in the menu.
     AllMovies("All movies", "Library", false),
     AllShows("All shows", "Library", false),
@@ -144,6 +146,7 @@ private fun tabIcon(tab: Tab): ImageVector = when (tab) {
     Tab.Home -> Icons.Filled.Home
     Tab.Movies -> Icons.Filled.PlayArrow
     Tab.Collections -> Icons.Filled.Star
+    Tab.Discover -> Icons.Filled.Favorite
     Tab.Settings -> Icons.Filled.Settings
     else -> Icons.Filled.Menu
 }
