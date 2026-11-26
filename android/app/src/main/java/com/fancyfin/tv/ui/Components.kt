@@ -93,11 +93,12 @@ fun GlassButton(
     clear: Boolean = false,
     onFocused: () -> Unit = {},
     compact: Boolean = false,
+    small: Boolean = false,
 ) {
     FocusBox(
         onClick = onClick,
         onFocused = onFocused,
-        modifier = modifier.height(if (compact) 26.dp else 36.dp),
+        modifier = modifier.height(if (small) 20.dp else if (compact) 26.dp else 36.dp),
         shape = RoundedCornerShape(UiSettings.corner.button),
         focusedScale = 1.06f,
     ) { focused ->
@@ -108,11 +109,11 @@ fun GlassButton(
             clear -> Color.White.copy(alpha = 0.06f)
             else -> Palette.GlassFill
         }
-        Box(Modifier.fillMaxHeight().background(fill).padding(horizontal = if (compact) 12.dp else 18.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxHeight().background(fill).padding(horizontal = if (small) 9.dp else if (compact) 12.dp else 18.dp), contentAlignment = Alignment.Center) {
             Text(
                 label,
                 color = if (primary) Color.Black else Palette.Text,
-                fontSize = if (compact) 11.sp else 13.sp,
+                fontSize = if (small) 9.sp else if (compact) 11.sp else 13.sp,
                 fontWeight = FontWeight.SemiBold,
             )
         }
@@ -204,10 +205,11 @@ fun PillButton(
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
     solid: Boolean = false,
+    small: Boolean = false,
 ) {
     FocusBox(
         onClick = onClick,
-        modifier = modifier.height(30.dp),
+        modifier = modifier.height(if (small) 22.dp else 30.dp),
         shape = RoundedCornerShape(50),
         focusedScale = 1.06f,
         edge = false,
@@ -216,22 +218,22 @@ fun PillButton(
         Row(
             Modifier.fillMaxHeight()
                 .background(if (solid) Color.White.copy(alpha = if (focused) 1f else 0.92f) else Color.White.copy(alpha = if (focused) 0.32f else 0.18f))
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = if (small) 11.dp else 16.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (small) 4.dp else 6.dp),
         ) {
-            if (icon != null) Icon(icon, null, tint = ink, modifier = Modifier.size(14.dp))
-            Text(label, color = ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            if (icon != null) Icon(icon, null, tint = ink, modifier = Modifier.size(if (small) 11.dp else 14.dp))
+            Text(label, color = ink, fontSize = if (small) 10.sp else 12.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
 
 /** A small round button with just an icon (favourite, watched). Filled white when it's switched on. */
 @Composable
-fun IconCircleButton(icon: ImageVector, on: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun IconCircleButton(icon: ImageVector, on: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, small: Boolean = false) {
     FocusBox(
         onClick = onClick,
-        modifier = modifier.size(30.dp),
+        modifier = modifier.size(if (small) 22.dp else 30.dp),
         shape = CircleShape,
         focusedScale = 1.1f,
         edge = false,
@@ -240,7 +242,7 @@ fun IconCircleButton(icon: ImageVector, on: Boolean, onClick: () -> Unit, modifi
             Modifier.fillMaxSize().background(if (on) Color.White else Color.White.copy(alpha = if (focused) 0.32f else 0.18f)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, null, tint = if (on) Color.Black else Palette.Text, modifier = Modifier.size(15.dp))
+            Icon(icon, null, tint = if (on) Color.Black else Palette.Text, modifier = Modifier.size(if (small) 12.dp else 15.dp))
         }
     }
 }

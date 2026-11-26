@@ -141,7 +141,7 @@ fun InfoBlock(entry: HeroEntry?, client: JellyfinClient, modifier: Modifier = Mo
         } else {
             Text(entry.title, color = Palette.Text, fontSize = 30.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(520.dp))
         }
-        entry.subtitle?.let {
+        (entry.subtitle ?: server?.tagline)?.let {
             Text(it, color = Palette.Text, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
         }
         Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -379,6 +379,7 @@ fun TitleScreen(
                                     label = (if (resuming) "Resume" else "Play") + (target.episodeLabel?.let { " $it" } ?: ""),
                                     icon = Icons.Filled.PlayArrow,
                                     solid = true,
+                                    small = true,
                                     modifier = lead(),
                                     onClick = { onPlay(target) },
                                 )
@@ -394,6 +395,7 @@ fun TitleScreen(
                                         else -> "Add to $app"
                                     },
                                     solid = arrState == null,
+                                    small = true,
                                     modifier = lead(),
                                     onClick = {
                                         if (arrState == null) {
@@ -406,6 +408,7 @@ fun TitleScreen(
                             }
                             if (shown != null) {
                                 IconCircleButton(
+                                    small = true,
                                     icon = Icons.Filled.Star,
                                     on = shown.favorite,
                                     onClick = {
@@ -419,6 +422,7 @@ fun TitleScreen(
                                     },
                                 )
                                 IconCircleButton(
+                                    small = true,
                                     icon = Icons.Filled.Check,
                                     on = shown.played,
                                     modifier = lead(),
@@ -433,7 +437,7 @@ fun TitleScreen(
                                     },
                                 )
                                 if (UiSettings.advanced) {
-                                    IconCircleButton(icon = Icons.Filled.Edit, on = false, onClick = { onEdit(shown) })
+                                    IconCircleButton(small = true, icon = Icons.Filled.Edit, on = false, onClick = { onEdit(shown) })
                                 }
                             }
                         }
@@ -477,7 +481,7 @@ fun TitleScreen(
                             when (key) {
                                 "eps" -> Column {
                                     HRow(defaultSpec, spacing = 8.dp, vertical = 0.dp, modifier = Modifier.onFocusChanged { pillFocused = it.hasFocus }) {
-                                        items(seasons) { s -> GlassButton(s.name, onClick = { season = s }, primary = s.id == season?.id, compact = true) }
+                                        items(seasons) { s -> GlassButton(s.name, onClick = { season = s }, primary = s.id == season?.id, small = true) }
                                     }
                                     HRow(defaultSpec, vertical = 8.dp, modifier = Modifier.focusRequester(episodesReq)) {
                                         items(episodes) { ep ->
