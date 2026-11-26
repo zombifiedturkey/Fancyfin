@@ -138,8 +138,10 @@ fun DiscoverScreen(
         }
         state.focused = state.results.firstOrNull()
         state.focusRow = 0
-        state.listState.scrollToItem(0)
         state.loading = false
+        // The grid only exists once loading is off, and scrolling a list that isn't drawn yet waits for it.
+        delay(60)
+        try { state.listState.scrollToItem(0) } catch (e: Exception) { /* nothing to scroll */ }
     }
     LaunchedEffect(state.focusRow) { state.listState.animateScrollToItem(state.focusRow) }
 
