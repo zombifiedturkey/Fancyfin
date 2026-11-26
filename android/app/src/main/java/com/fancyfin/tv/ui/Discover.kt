@@ -60,6 +60,11 @@ class DiscoverState {
     var kind by mutableStateOf("movie")
     var genre by mutableStateOf<String?>(null)
     var decade by mutableStateOf<Int?>(null)
+    var englishOnly by mutableStateOf(true)
+    var animation by mutableStateOf(false)
+    var nextPage = 1
+    var more = false
+    var loadingMore = false
     var results by mutableStateOf<List<HeroEntry>>(emptyList())
     var loading by mutableStateOf(true)
     var note by mutableStateOf<String?>(null)
@@ -75,7 +80,7 @@ class DiscoverState {
 private val DECADES = listOf(2020, 2010, 2000, 1990, 1980, 1970, 1960, 1950, 1940, 1930, 1920)
 
 /**
- * The best rated 100 movies or shows, narrowed by genre and decade. The details of the title you're on
+ * The best rated movies and shows, narrowed by genre and decade, going on down the list as you scroll. The details of the title you're on
  * sit above, the pills below them, then the grid. OK opens a title (where Radarr / Sonarr can add it);
  * holding OK on one that isn't on your server adds it straight away.
  */
@@ -121,19 +126,26 @@ fun DiscoverScreen(
         if (state.genre != null && state.genre !in state.genres) state.genre = null
     }
 
-    LaunchedEffect(state.kind, state.genre, state.decade, state.genresFor) {
+    LaunchedEffect(state.kind, state.genre, state.decade, state.englishOnly, state.animation, state.genresFor) {
         if (state.genresFor != state.kind) return@LaunchedEffect
-        val key = "${state.kind}|${state.genre}|${state.decade}"
+        val key = "${state.kind}|${state.genre}|${state.decade}|${state.englishOnly}|${state.animation}"
         if (state.loadedKey == key) return@LaunchedEffect
         state.loading = true
         state.note = null
         if (state.owned.isEmpty()) state.owned = try { client.serverIndex() } catch (e: Exception) { emptyMap() }
-        val found = try { client.topRated(state.kind, state.genre, state.decade) } catch (e: Exception) { emptyList() }
+        val found = try {
+            client.topRated(state.kind, state.genre, state.decade, state.englishOnly, state.animation, 1, 3)
+        } catch (e: Exception) {
+            JellyfinClient.TopPage(emptyList(), false)
+        }
         if (found == null) {
             state.results = emptyList()
+            state.more = false
             state.note = "TMDB isn't connected yet. Add its key in Fancyfin's settings on the web."
         } else {
-            state.results = found.map { discoverEntry(it, state.owned) }
+            state.results = found.items.distinctBy { it.tmdbId }.map { discoverEntry(it, state.owned) }
+            state.nextPage = 4
+            state.more = found.more
             state.loadedKey = key
         }
         state.focused = state.results.firstOrNull()
@@ -142,6 +154,28 @@ fun DiscoverScreen(
         // The grid only exists once loading is off, and scrolling a list that isn't drawn yet waits for it.
         delay(60)
         try { state.listState.scrollToItem(0) } catch (e: Exception) { /* nothing to scroll */ }
+    }
+
+    // Near the bottom, fetch the next two pages (up to 500 titles).
+    val rowCount = (state.results.size + 8) / 9
+    LaunchedEffect(state.focusRow, state.results.size) {
+        if (state.loading || !state.more || state.loadingMore || state.focusRow < rowCount - 3) return@LaunchedEffect
+        state.loadingMore = true
+        val key = state.loadedKey
+        val next = try {
+            client.topRated(state.kind, state.genre, state.decade, state.englishOnly, state.animation, state.nextPage, 2)
+        } catch (e: Exception) {
+            null
+        }
+        if (next != null && state.loadedKey == key) {
+            val have = state.results.map { it.tmdbId }.toHashSet()
+            state.results = state.results + next.items.filter { have.add(it.tmdbId) }.map { discoverEntry(it, state.owned) }
+            state.nextPage += 2
+            state.more = next.more
+        } else if (next == null) {
+            state.more = false
+        }
+        state.loadingMore = false
     }
     LaunchedEffect(state.focusRow) { state.listState.animateScrollToItem(state.focusRow) }
 
@@ -154,7 +188,7 @@ fun DiscoverScreen(
                     Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(ROW_VIEW_H).clipToBounds()) {
                         Column(Modifier.padding(top = VIEW_HEADROOM, bottom = 4.dp)) {
                             Row(Modifier.padding(start = 20.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Text("Top 100", color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                Text("Discover", color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                                 Text("Hold OK on a title that isn't on your server to add it", color = Palette.TextMuted, fontSize = 10.sp)
                             }
                             Row(Modifier.padding(start = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -162,6 +196,8 @@ fun DiscoverScreen(
                                 SortPill("TV Shows", state.kind == "tv", { state.kind = "tv" })
                                 SortPill(if (state.genre == null) "Genre ▾" else "${state.genre} ▾", state.genre != null, { picker = "genre" }, Modifier.focusRequester(genrePill))
                                 SortPill(if (state.decade == null) "Decade ▾" else "${state.decade}s ▾", state.decade != null, { picker = "decade" }, Modifier.focusRequester(decadePill))
+                                SortPill("English only", state.englishOnly, { state.englishOnly = !state.englishOnly })
+                                SortPill("Animation", state.animation, { state.animation = !state.animation })
                             }
                         }
                         when {
@@ -173,9 +209,9 @@ fun DiscoverScreen(
                             else -> LazyColumn(Modifier.fillMaxWidth().weight(1f), state = state.listState) {
                                 itemsIndexed(state.results.chunked(9)) { r, chunk ->
                                     Row(Modifier.padding(start = 20.dp, top = 6.dp, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        chunk.forEachIndexed { c, e ->
+                                        chunk.forEach { e ->
                                             DiscoverTile(
-                                                e, rank = r * 9 + c + 1,
+                                                e,
                                                 onClick = { onTitle(titleRef(e)) },
                                                 onLongClick = {
                                                     if (e.onServer != null) {
@@ -245,9 +281,9 @@ fun DiscoverScreen(
     }
 }
 
-/** A poster with its rank in the top 100, and a tick when the title is already on your server. */
+/** A poster, with a tick when the title is already on your server. */
 @Composable
-private fun DiscoverTile(e: HeroEntry, rank: Int, onClick: () -> Unit, onLongClick: () -> Unit, onFocused: () -> Unit) {
+private fun DiscoverTile(e: HeroEntry, onClick: () -> Unit, onLongClick: () -> Unit, onFocused: () -> Unit) {
     FocusBox(
         onClick = onClick,
         onLongClick = onLongClick,
@@ -258,10 +294,6 @@ private fun DiscoverTile(e: HeroEntry, rank: Int, onClick: () -> Unit, onLongCli
     ) { _ ->
         Box(Modifier.fillMaxSize().background(Palette.GlassFill)) {
             e.poster?.let { AsyncImage(model = smallTmdb(it), contentDescription = e.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
-            Text(
-                "$rank", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.TopStart).padding(4.dp).background(Color(0xB3000000), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 1.dp),
-            )
             if (e.onServer != null) {
                 Box(Modifier.align(Alignment.TopEnd).padding(4.dp).width(16.dp).height(16.dp).background(Palette.Accent, CircleShape), contentAlignment = Alignment.Center) {
                     Icon(Icons.Filled.Check, null, tint = Color.Black, modifier = Modifier.width(11.dp).height(11.dp))

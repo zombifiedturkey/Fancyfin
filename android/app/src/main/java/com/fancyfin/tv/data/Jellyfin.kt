@@ -424,23 +424,37 @@ class JellyfinClient(private val prefs: Prefs) {
         genreLists?.get(kind) ?: emptyList()
     }
 
+    /** A run of TMDB's best rated titles, and whether there are more after it. */
+    class TopPage(val items: List<Discover>, val more: Boolean)
+
     /**
-     * The best rated movies or shows on TMDB, up to 100, for a genre and/or a decade (the decade's first year,
-     * like 1990). Null when TMDB isn't set up in Fancyfin. Needs a fair number of votes so obscure titles with a
-     * handful of perfect scores don't win.
+     * The best rated movies or shows on TMDB for a genre and/or a decade (the decade's first year, like 1990),
+     * [pages] pages of 20 starting at [page], up to 25 pages (500 titles) in all. Titles need plenty of votes so
+     * obscure ones with a handful of perfect scores don't climb the list. [englishOnly] drops foreign-language
+     * titles and [animation] says whether cartoons and anime are included (unless you pick the Animation genre).
+     * Null when TMDB isn't set up in Fancyfin.
      */
-    suspend fun topRated(kind: String, genre: String?, decade: Int?): List<Discover>? = withContext(Dispatchers.IO) {
+    suspend fun topRated(
+        kind: String, genre: String?, decade: Int?, englishOnly: Boolean, animation: Boolean, page: Int, pages: Int,
+    ): TopPage? = withContext(Dispatchers.IO) {
         loadGenres()
         val filtered = genre != null || decade != null
-        val votes = if (kind == "movie") (if (filtered) 300 else 1500) else (if (filtered) 100 else 500)
+        val votes = if (kind == "movie") (if (filtered) 1000 else 3000) else (if (filtered) 250 else 800)
         val query = StringBuilder("sort_by=vote_average.desc&include_adult=false&vote_count.gte=$votes")
         val genreId = genre?.let { genreIds?.get(kind)?.get(it.lowercase()) }
         if (genreId != null) query.append("&with_genres=").append(genreId)
+        if (englishOnly) query.append("&with_original_language=en")
+        // 16 is Animation; on shows, talk shows (10767) and news (10763) also climb the ratings without being what you want here.
+        val out = ArrayList<String>()
+        if (!animation && genre?.lowercase() != "animation") out.add("16")
+        if (kind == "tv") { out.add("10767"); out.add("10763") }
+        if (out.isNotEmpty()) query.append("&without_genres=").append(out.joinToString("%7C"))
         if (decade != null) {
             val field = if (kind == "movie") "primary_release_date" else "first_air_date"
             query.append("&$field.gte=$decade-01-01&$field.lte=${decade + 9}-12-31")
         }
-        val pages = (1..5).map { p ->
+        val last = (page + pages - 1).coerceAtMost(25)
+        val bodies = (page..last).map { p ->
             async {
                 try {
                     request(fancyfin, "/tmdb/discover/$kind?$query&page=$p")
@@ -449,14 +463,16 @@ class JellyfinClient(private val prefs: Prefs) {
                 }
             }
         }.awaitAll()
-        if (pages.any { it == "notset" }) return@withContext null
-        val seen = HashSet<Int>()
-        val out = ArrayList<Discover>()
-        for (body in pages) {
-            val results = body?.let { try { JSONObject(it).optJSONArray("results") } catch (e: Exception) { null } } ?: continue
-            for (d in parseTmdb(results, kind)) if (seen.add(d.tmdbId)) out.add(d)
+        if (bodies.any { it == "notset" }) return@withContext null
+        val items = ArrayList<Discover>()
+        var totalPages = 0
+        for (body in bodies) {
+            val json = body?.let { try { JSONObject(it) } catch (e: Exception) { null } } ?: continue
+            totalPages = maxOf(totalPages, json.optInt("total_pages"))
+            val results = json.optJSONArray("results") ?: continue
+            items.addAll(parseTmdb(results, kind))
         }
-        out.take(100)
+        TopPage(items, last < 25 && last < totalPages)
     }
 
     /** A video from TMDB (always YouTube here): a trailer, teaser, clip, featurette or behind the scenes. */
