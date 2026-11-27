@@ -569,6 +569,7 @@ fun BrowseScreen(
 
     LaunchedEffect(tab) {
         if (state.loaded) return@LaunchedEffect
+        failed = false
         val fresh = sections.isEmpty()
         val acc = ArrayList<HeroSection>()
         fun add(section: HeroSection) { acc.add(section); if (fresh) sections = acc.toList() }
@@ -639,6 +640,9 @@ fun BrowseScreen(
             }
             if (!fresh) sections = acc.toList()
             state.loaded = true
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Leaving the page (to play something, say) stops the load; that isn't the server being down.
+            throw e
         } catch (e: Exception) {
             if (sections.isEmpty()) failed = true
         }
@@ -717,6 +721,7 @@ fun GenreScreen(
 
     LaunchedEffect(genre) {
         if (state.loaded) return@LaunchedEffect
+        failed = false
         val fresh = sections.isEmpty()
         val acc = ArrayList<HeroSection>()
         fun add(section: HeroSection) { acc.add(section); if (fresh) sections = acc.toList() }
@@ -747,6 +752,9 @@ fun GenreScreen(
             if (recent.isNotEmpty()) add(HeroSection("Recently added", recent.map { itemEntry(it, client) }))
             if (!fresh) sections = acc.toList()
             state.loaded = true
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Leaving the page (to play something, say) stops the load; that isn't the server being down.
+            throw e
         } catch (e: Exception) {
             if (sections.isEmpty()) failed = true
         }
