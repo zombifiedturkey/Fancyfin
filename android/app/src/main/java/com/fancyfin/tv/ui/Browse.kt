@@ -79,6 +79,7 @@ import com.fancyfin.tv.data.Discover
 import com.fancyfin.tv.data.Item
 import com.fancyfin.tv.data.JellyfinClient
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
 /** One tile in a feature row: a title, on the server or not. The last tile of a genre row is "See all". */
@@ -579,8 +580,11 @@ fun BrowseScreen(
             else -> "all"
         }
         try {
-            val index = try { client.serverIndex() } catch (e: Exception) { emptyMap() }
-            val trending = try { client.trending(trendingKind) } catch (e: Exception) { null }
+            // Fetch the slow parts side by side instead of one after another.
+            val indexJob = async { try { client.serverIndex() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { emptyMap() } }
+            val trendingJob = async { try { client.trending(trendingKind) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null } }
+            val index = indexJob.await()
+            val trending = trendingJob.await()
             val popular = if (!trending.isNullOrEmpty()) {
                 trending.map { discoverEntry(it, index) }
             } else {

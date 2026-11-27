@@ -1403,7 +1403,12 @@ class JellyfinClient(private val prefs: Prefs) {
     }
 
     /** Everything on the server, keyed "movie:<tmdb id>" or "tv:<tmdb id>", to tell what is already here. */
+    private var indexCache: Map<String, Item>? = null
+    private var indexAt = 0L
+
     suspend fun serverIndex(): Map<String, Item> {
+        val cached = indexCache
+        if (cached != null && System.currentTimeMillis() - indexAt < 120_000) return cached
         val all = items(
             get(
                 "/Users/$userId/Items?Recursive=true&IncludeItemTypes=Movie,Series&Fields=ProviderIds" +
@@ -1415,6 +1420,8 @@ class JellyfinClient(private val prefs: Prefs) {
             val id = item.tmdbId ?: continue
             out[(if (item.isMovie) "movie:" else "tv:") + id] = item
         }
+        indexCache = out
+        indexAt = System.currentTimeMillis()
         return out
     }
 

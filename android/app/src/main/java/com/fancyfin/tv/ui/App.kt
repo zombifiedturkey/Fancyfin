@@ -69,7 +69,9 @@ fun FancyfinApp() {
                 signedIn = false
             }
             val goTab: (Tab) -> Unit = { tab ->
-                screens.clear()
+                // Keep what each tab already loaded so it appears instantly; it refreshes quietly in the background.
+                screens.keys.removeAll { !it.startsWith("tab:") }
+                screens.values.forEach { it.loaded = false }
                 stack.clear()
                 stack.add(Route.Main(tab))
             }
