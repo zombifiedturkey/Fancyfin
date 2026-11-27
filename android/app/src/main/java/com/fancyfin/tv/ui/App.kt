@@ -22,7 +22,10 @@ import kotlinx.coroutines.launch
 /** Where you are in the app. Back goes to the one before. */
 private sealed class Route {
     data class Main(val tab: Tab) : Route()
-    data class Title(val ref: TitleRef) : Route()
+    data class Title(val ref: TitleRef) : Route() {
+        /** Where you were on this page (season, episode, row), so coming back to it puts you there again. */
+        val mem = TitleMem()
+    }
     data class Person(val ref: PersonRef) : Route()
     data class Edit(val item: Item) : Route()
     data class Genre(val genre: String, val types: String) : Route()
@@ -173,7 +176,7 @@ fun FancyfinApp() {
                 // Keyed so opening another title from this one (More like this, franchise) starts a fresh page
                 // instead of reusing the old page's state.
                 is Route.Title -> androidx.compose.runtime.key(route.ref) {
-                    TitleScreen(route.ref, client, play, openTitle, showTrailer, { p -> stack.add(Route.Person(PersonRef(p.id, p.name, p.photo))) }, { stack.add(Route.Edit(it)) })
+                    TitleScreen(route.ref, client, play, openTitle, showTrailer, { p -> stack.add(Route.Person(PersonRef(p.id, p.name, p.photo))) }, { stack.add(Route.Edit(it)) }, route.mem)
                 }
                 is Route.Edit -> EditScreen(route.item, client) {
                     // The title was deleted: leave the edit page, and the title page for it too.

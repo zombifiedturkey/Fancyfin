@@ -83,6 +83,15 @@ import com.fancyfin.tv.data.trailerKeys
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+/** Remembers where you were on a title page while another page (an actor, say) is on top of it. */
+class TitleMem {
+    var seasonId: String? = null
+    var episodeId: String? = null
+    /** Set when the page was opened from an episode: that is the one Play starts. */
+    var openEpisodeId: String? = null
+    var rowKey: String? = null
+}
+
 /** Which title to show: a movie or show from TMDB, the copy on your server if there is one, or both. */
 data class TitleRef(
     val kind: String,
@@ -151,6 +160,7 @@ fun TitleScreen(
     onTrailer: (List<String>) -> Unit,
     onPerson: (Person) -> Unit,
     onEdit: (Item) -> Unit = {},
+    mem: TitleMem = remember { TitleMem() },
 ) {
     val scope = rememberCoroutineScope()
     var item by remember { mutableStateOf(ref.server) }
@@ -195,7 +205,14 @@ fun TitleScreen(
                 var full = client.item(start.id, start.duplicateIds)
                 // Landing on an episode (from Continue watching) shows its show.
                 val seriesId = full.seriesId
-                if (full.isEpisode && seriesId != null) full = client.item(seriesId)
+                if (full.isEpisode && seriesId != null) {
+                    if (mem.episodeId == null) {
+                        mem.episodeId = full.id
+                        mem.seasonId = full.seasonId
+                        mem.openEpisodeId = full.id
+                    }
+                    full = client.item(seriesId)
+                }
                 item = full
                 if (tmdbId == null) tmdbId = full.tmdbId?.toIntOrNull()
             } catch (e: Exception) {
@@ -224,7 +241,8 @@ fun TitleScreen(
         if (current.isSeries) {
             try {
                 seasons = client.seasons(current.id)
-                season = seasons.firstOrNull { (it.unplayedCount ?: 1) > 0 } ?: seasons.firstOrNull()
+                season = seasons.firstOrNull { it.id == mem.seasonId }
+                    ?: seasons.firstOrNull { (it.unplayedCount ?: 1) > 0 } ?: seasons.firstOrNull()
             } catch (e: Exception) {
                 seasons = emptyList()
             }
@@ -236,12 +254,20 @@ fun TitleScreen(
         episodes = try { client.episodes(current.id, s.id) } catch (e: Exception) { emptyList() }
     }
 
+    // Land on the remembered episode: scroll the episodes row so it is the first one in view.
+    val episodesState = rememberLazyListState()
+    LaunchedEffect(episodes) {
+        val at = episodes.indexOfFirst { it.id == mem.episodeId }
+        if (episodes.isNotEmpty()) try { episodesState.scrollToItem(at.coerceAtLeast(0)) } catch (e: Exception) { /* not laid out yet */ }
+    }
+
     // What Play starts: the movie, or for a show the episode you're up to.
     val shown = item
     val isShow = shown != null && shown.isSeries
     val target: Item? = when {
         shown == null -> null
-        shown.isSeries -> episodes.firstOrNull { it.positionTicks > 0 && !it.played }
+        shown.isSeries -> episodes.firstOrNull { it.id == mem.openEpisodeId }
+            ?: episodes.firstOrNull { it.positionTicks > 0 && !it.played }
             ?: episodes.firstOrNull { !it.played }
             ?: episodes.firstOrNull()
         else -> shown
@@ -292,6 +318,7 @@ fun TitleScreen(
     }
     // -1 is the buttons; 0.. is a row in keys.
     var row by remember { mutableStateOf(-1) }
+    var rowRestored by remember { mutableStateOf(mem.rowKey == null) }
     var pillFocused by remember { mutableStateOf(false) }
     val sectionReq = remember { List(6) { FocusRequester() } }
     val episodesReq = remember { FocusRequester() }
@@ -304,6 +331,16 @@ fun TitleScreen(
             try { (if (keys.getOrNull(n) == "eps") episodesReq else sectionReq[n]).requestFocus() } catch (e: Exception) { /* not laid out yet */ }
         }
     }
+    // Coming back to this page (from an actor, say): go back to the row you were on.
+    LaunchedEffect(keys) {
+        val want = mem.rowKey
+        if (!rowRestored && want != null && keys.contains(want)) {
+            rowRestored = true
+            delay(350)
+            goSection(keys.indexOf(want))
+        }
+    }
+    LaunchedEffect(row) { if (rowRestored) mem.rowKey = keys.getOrNull(row) }
     fun goButtons() {
         scope.launch { try { first.requestFocus() } catch (e: Exception) { /* not laid out yet */ } }
     }
@@ -482,12 +519,12 @@ fun TitleScreen(
                             when (key) {
                                 "eps" -> Column {
                                     HRow(defaultSpec, spacing = 8.dp, vertical = 0.dp, modifier = Modifier.onFocusChanged { pillFocused = it.hasFocus }) {
-                                        items(seasons) { s -> GlassButton(s.name, onClick = { season = s }, primary = s.id == season?.id, small = true) }
+                                        items(seasons) { s -> GlassButton(s.name, onClick = { season = s; mem.seasonId = s.id; mem.episodeId = null; mem.openEpisodeId = null }, primary = s.id == season?.id, small = true) }
                                     }
-                                    HRow(defaultSpec, vertical = 8.dp, modifier = Modifier.focusRequester(episodesReq)) {
+                                    HRow(defaultSpec, vertical = 8.dp, modifier = Modifier.focusRequester(episodesReq), state = episodesState) {
                                         items(episodes) { ep ->
                                             Column(Modifier.width(200.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                                ItemCard(ep, client, 200.dp, 112.dp, true, onClick = { onPlay(ep) }, onFocused = { focusedEp = ep })
+                                                ItemCard(ep, client, 200.dp, 112.dp, true, onClick = { onPlay(ep) }, onFocused = { focusedEp = ep; mem.episodeId = ep.id })
                                                 Text(
                                                     (ep.indexNumber?.let { "$it. " } ?: "") + ep.name,
                                                     color = Palette.Text, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -646,10 +683,12 @@ private fun HRow(
     spacing: Dp = 12.dp,
     vertical: Dp = 4.dp,
     modifier: Modifier = Modifier,
+    state: androidx.compose.foundation.lazy.LazyListState = rememberLazyListState(),
     content: LazyListScope.() -> Unit,
 ) {
     CompositionLocalProvider(LocalBringIntoViewSpec provides spec) {
         LazyRow(
+            state = state,
             modifier = modifier,
             horizontalArrangement = Arrangement.spacedBy(spacing),
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = vertical),
