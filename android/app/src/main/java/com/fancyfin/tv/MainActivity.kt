@@ -24,6 +24,7 @@ class MainActivity : ComponentActivity() {
     /** A Watch Next card opens fancyfin://play/<id>: hand that title to the app to start playing. */
     private fun handleLink(intent: Intent?) {
         val data = intent?.data ?: return
+        android.util.Log.i("Fancyfin", "link received: $data")
         if (data.scheme == "fancyfin" && data.host == "play") DeepLink.itemId = data.lastPathSegment
     }
 

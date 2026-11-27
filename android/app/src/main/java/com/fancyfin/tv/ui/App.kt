@@ -126,7 +126,13 @@ fun FancyfinApp() {
             androidx.compose.runtime.LaunchedEffect(linked) {
                 if (linked != null) {
                     DeepLink.itemId = null
-                    try { play(client.item(linked)) } catch (e: Exception) { /* leave the app where it is */ }
+                    android.util.Log.i("Fancyfin", "opening linked title $linked")
+                    try {
+                        play(client.item(linked))
+                    } catch (e: Exception) {
+                        android.util.Log.w("Fancyfin", "couldn't open linked title $linked", e)
+                        android.widget.Toast.makeText(context, "Couldn't open that title: " + (e.message ?: "unknown error"), android.widget.Toast.LENGTH_LONG).show()
+                    }
                 }
             }
             MenuActions.genre = { genre, types ->
