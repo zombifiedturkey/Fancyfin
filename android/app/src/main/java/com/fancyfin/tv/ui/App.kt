@@ -125,13 +125,19 @@ fun FancyfinApp() {
             val linked = DeepLink.itemId
             androidx.compose.runtime.LaunchedEffect(linked) {
                 if (linked != null) {
+                    // Clearing the link changes this effect's key and would cancel it, so the real work
+                    // runs in the screen's own scope instead.
                     DeepLink.itemId = null
                     android.util.Log.i("Fancyfin", "opening linked title $linked")
-                    try {
-                        play(client.item(linked))
-                    } catch (e: Exception) {
-                        android.util.Log.w("Fancyfin", "couldn't open linked title $linked", e)
-                        android.widget.Toast.makeText(context, "Couldn't open that title: " + (e.message ?: "unknown error"), android.widget.Toast.LENGTH_LONG).show()
+                    scope.launch {
+                        try {
+                            play(client.item(linked))
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            android.util.Log.w("Fancyfin", "couldn't open linked title $linked", e)
+                            android.widget.Toast.makeText(context, "Couldn't open that title: " + (e.message ?: "unknown error"), android.widget.Toast.LENGTH_LONG).show()
+                        }
                     }
                 }
             }
