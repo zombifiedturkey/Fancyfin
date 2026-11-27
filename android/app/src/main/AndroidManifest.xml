@@ -6,6 +6,11 @@
     <!-- Lets Continue watching show up in the Android TV launcher's Watch Next row. -->
     <uses-permission android:name="com.android.providers.tv.permission.WRITE_EPG_DATA" />
 
+    <!-- Lets the custom launcher read Continue watching and Up next from LauncherProvider. -->
+    <permission
+        android:name="com.fancyfin.tv.permission.READ_ROWS"
+        android:protectionLevel="normal" />
+
     <!-- Runs on Android TV (leanback) boxes like the Shield, and also on a phone or tablet. -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
@@ -40,6 +45,12 @@
                 <data android:scheme="fancyfin" android:host="play" />
             </intent-filter>
         </activity>
+
+        <provider
+            android:name=".LauncherProvider"
+            android:authorities="com.fancyfin.tv.launcher"
+            android:exported="true"
+            android:readPermission="com.fancyfin.tv.permission.READ_ROWS" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

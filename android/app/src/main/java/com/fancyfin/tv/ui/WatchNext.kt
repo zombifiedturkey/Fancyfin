@@ -8,7 +8,10 @@ import androidx.compose.runtime.setValue
 import androidx.tvprovider.media.tv.TvContractCompat
 import androidx.tvprovider.media.tv.WatchNextProgram
 import com.fancyfin.tv.data.Item
+import com.fancyfin.tv.MainActivity
 import com.fancyfin.tv.data.JellyfinClient
+import org.json.JSONArray
+import org.json.JSONObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -25,6 +28,7 @@ object WatchNext {
     private const val PREFIX = "fancyfin:"
 
     suspend fun publish(context: Context, client: JellyfinClient, resume: List<Item>) = withContext(Dispatchers.IO) {
+        publishLauncherRows(context, client, resume)
         try {
             val resolver = context.contentResolver
             val stale = ArrayList<Long>()
@@ -60,5 +64,76 @@ object WatchNext {
         } catch (e: Exception) {
             // The launcher row is a bonus; never let it break the app.
         }
+    }
+}
+
+/**
+ * What the custom launcher reads through [com.fancyfin.tv.LauncherProvider]: Continue watching and Up next,
+ * kept in preferences so the launcher gets an answer even when the app isn't running.
+ */
+object LauncherRows {
+    const val AUTHORITY = "com.fancyfin.tv.launcher"
+    private const val KEY = "launcher_rows"
+
+    class Row(
+        val kind: String,
+        val sort: Int,
+        val itemId: String,
+        val title: String,
+        val subtitle: String,
+        val posterUrl: String,
+        val progress: Double,
+    )
+
+    fun save(context: Context, rows: List<Row>) {
+        val array = JSONArray()
+        rows.forEach {
+            array.put(
+                JSONObject().put("kind", it.kind).put("sort", it.sort).put("id", it.itemId).put("title", it.title)
+                    .put("subtitle", it.subtitle).put("poster", it.posterUrl).put("progress", it.progress),
+            )
+        }
+        context.getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE).edit().putString(KEY, array.toString()).apply()
+        context.contentResolver.notifyChange(Uri.parse("content://$AUTHORITY/rows"), null)
+    }
+
+    fun load(context: Context): List<Row> {
+        val text = context.getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE).getString(KEY, null) ?: return emptyList()
+        return try {
+            val array = JSONArray(text)
+            (0 until array.length()).map {
+                val o = array.getJSONObject(it)
+                Row(
+                    o.optString("kind"), o.optInt("sort"), o.optString("id"), o.optString("title"),
+                    o.optString("subtitle"), o.optString("poster"), o.optDouble("progress", 0.0),
+                )
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+}
+
+private fun launcherRow(client: JellyfinClient, kind: String, sort: Int, item: Item): LauncherRows.Row {
+    val poster = if (item.isEpisode && item.seriesId != null) client.image(item.seriesId, "Primary", null, 300) else client.poster(item, 300)
+    val subtitle = if (item.isEpisode) {
+        val label = if (item.parentIndexNumber != null && item.indexNumber != null) "S${item.parentIndexNumber}·E${item.indexNumber} " else ""
+        label + item.name
+    } else {
+        ""
+    }
+    val progress = if (kind == "continue" && item.runtimeTicks > 0) (item.positionTicks.toDouble() / item.runtimeTicks).coerceIn(0.0, 1.0) else 0.0
+    return LauncherRows.Row(kind, sort, item.id, item.seriesName ?: item.name, subtitle, poster ?: "", progress)
+}
+
+private suspend fun publishLauncherRows(context: Context, client: JellyfinClient, resume: List<Item>) {
+    try {
+        val resumeIds = resume.map { it.id }.toSet()
+        val next = try { client.nextUp().filter { it.id !in resumeIds }.take(10) } catch (e: Exception) { emptyList() }
+        val rows = resume.take(12).mapIndexed { i, it -> launcherRow(client, "continue", i, it) } +
+            next.mapIndexed { i, it -> launcherRow(client, "nextup", i, it) }
+        LauncherRows.save(context, rows)
+    } catch (e: Exception) {
+        // The launcher's rows are a bonus; never let them break the app.
     }
 }
