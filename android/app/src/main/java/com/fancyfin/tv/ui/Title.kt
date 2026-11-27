@@ -322,6 +322,18 @@ fun TitleScreen(
     var pillFocused by remember { mutableStateOf(false) }
     val sectionReq = remember { List(6) { FocusRequester() } }
     val episodesReq = remember { FocusRequester() }
+    val pillsReq = remember { FocusRequester() }
+    // Buttons -> seasons -> episodes, one step per press whatever you are on horizontally.
+    fun goPills() {
+        scope.launch {
+            try { pillsReq.requestFocus() } catch (e: Exception) {
+                try { episodesReq.requestFocus() } catch (e2: Exception) { /* not laid out yet */ }
+            }
+        }
+    }
+    fun goEpisodes() {
+        scope.launch { try { episodesReq.requestFocus() } catch (e: Exception) { /* not laid out yet */ } }
+    }
     val rowShown = row.coerceIn(0, (keys.size - 1).coerceAtLeast(0))
     LaunchedEffect(row, keys) { if (keys.getOrNull(row) != "eps") focusedEp = null }
     fun goSection(n: Int) {
@@ -388,14 +400,14 @@ fun TitleScreen(
                         val last = keys.size - 1
                         when (ev.key) {
                             Key.DirectionDown -> when {
-                                row < 0 -> { if (last >= 0) goSection(0); true }
-                                keys.getOrNull(row) == "eps" && pillFocused -> false
+                                row < 0 -> { if (keys.getOrNull(0) == "eps") goPills() else if (last >= 0) goSection(0); true }
+                                keys.getOrNull(row) == "eps" && pillFocused -> { goEpisodes(); true }
                                 row < last -> { goSection(row + 1); true }
                                 else -> true
                             }
                             Key.DirectionUp -> when {
                                 row < 0 -> true
-                                keys.getOrNull(row) == "eps" && !pillFocused -> false
+                                keys.getOrNull(row) == "eps" && !pillFocused -> { goPills(); true }
                                 row == 0 -> { row = -1; goButtons(); true }
                                 else -> { goSection(row - 1); true }
                             }
@@ -519,11 +531,11 @@ fun TitleScreen(
                             when (key) {
                                 "eps" -> Column {
                                     HRow(defaultSpec, spacing = 8.dp, vertical = 0.dp, modifier = Modifier.onFocusChanged { pillFocused = it.hasFocus }) {
-                                        items(seasons) { s -> GlassButton(s.name, onClick = { season = s; mem.seasonId = s.id; mem.episodeId = null; mem.openEpisodeId = null }, primary = s.id == season?.id, small = true) }
+                                        items(seasons) { s -> GlassButton(s.name, onClick = { season = s; mem.seasonId = s.id; mem.episodeId = null; mem.openEpisodeId = null }, primary = s.id == season?.id, small = true, modifier = if (s.id == season?.id) Modifier.focusRequester(pillsReq) else Modifier) }
                                     }
                                     HRow(defaultSpec, vertical = 8.dp, modifier = Modifier.focusRequester(episodesReq), state = episodesState) {
                                         items(episodes) { ep ->
-                                            Column(Modifier.width(200.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                            Column(Modifier.width(200.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
                                                 ItemCard(ep, client, 200.dp, 112.dp, true, onClick = { onPlay(ep) }, onFocused = { focusedEp = ep; mem.episodeId = ep.id })
                                                 Text(
                                                     (ep.indexNumber?.let { "$it. " } ?: "") + ep.name,
