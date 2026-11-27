@@ -601,6 +601,18 @@ fun BrowseScreen(
             }
             loading = false
 
+            // TV Shows: the episodes that have aired most recently, from what's on your server (nothing unaired).
+            if (tab == Tab.Shows) {
+                val now = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
+                    .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }.format(java.util.Date())
+                val aired = try {
+                    client.library("Episode", "PremiereDate", true, extra = "&MaxPremiereDate=$now", limit = 20)
+                } catch (e: Exception) {
+                    emptyList()
+                }
+                if (aired.isNotEmpty()) add(HeroSection("Recently released episodes", aired.map { itemEntry(it, client) }))
+            }
+
             val resume = client.resume().filter { if (tab == Tab.Movies) it.isMovie else if (tab == Tab.Shows) it.isEpisode else true }
             if (tab == Tab.Home) WatchNext.publish(context, client, resume)
             if (resume.isNotEmpty()) add(HeroSection("Continue watching", resume.map { itemEntry(it, client) }, playDirect = true))
